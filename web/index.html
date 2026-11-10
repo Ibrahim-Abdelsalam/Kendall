@@ -3,8 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>p &lt; 0.05 / Plot Twist | Planetary Multi-Decadal Trend Detector</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%2322D3EE'/></svg>">
+  <title>p &lt; 0.05 / Kendall | Planetary Multi-Decadal Trend Detector</title>
+  <meta name="description" content="Kendall — Planetary Multi-Decadal Trend &amp; Era Shift Detector (2000–2025). Autocorrelation-corrected Mann-Kendall statistics, Hamed-Rao variance inflation, and false-discovery rate control across 10,368 grid cells.">
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Kendall | Planetary Multi-Decadal Trend Detector">
+  <meta property="og:description" content="Find the trends that are real. Planetary Multi-Decadal Trend &amp; Era Shift Detector (2000–2025).">
+  <meta property="og:image" content="icons/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Kendall | Planetary Multi-Decadal Trend Detector">
+  <meta name="twitter:description" content="Find the trends that are real. Planetary Multi-Decadal Trend &amp; Era Shift Detector (2000–2025).">
+  <meta name="twitter:image" content="icons/og-image.png">
+
+  <!-- Favicons and Web Manifest -->
+  <link rel="icon" type="image/svg+xml" href="icons/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+  <link rel="shortcut icon" href="favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0B1630">
   
   <!-- NASA Mission Control Typography: Barlow Condensed (Headings & Technical Labels), Inter (Body UI), IBM Plex Mono (Telemetry Numbers) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -65,12 +88,23 @@
   <!-- Top HUD Header -->
   <header class="hud-header">
     <div class="hud-header-left">
+      <div class="brand-logo" aria-label="Kendall Logo">
+        <svg class="brand-logo-svg" viewBox="0 0 512 512" width="28" height="28" fill="none">
+          <circle cx="256" cy="256" r="176" fill="#060C18" stroke="#16294C" stroke-width="12" />
+          <line x1="80" y1="256" x2="432" y2="256" stroke="#16294C" stroke-width="4" stroke-dasharray="8 8" />
+          <ellipse cx="256" cy="256" rx="88" ry="176" stroke="#16294C" stroke-width="4" stroke-dasharray="8 8" />
+          <line class="logo-trend-left" x1="132" y1="308" x2="256" y2="204" stroke="#22D3EE" stroke-width="36" stroke-linecap="round" />
+          <line class="logo-trend-right" x1="256" y1="204" x2="380" y2="308" stroke="#FF6B35" stroke-width="36" stroke-linecap="round" />
+          <circle class="logo-dot-glow" cx="256" cy="204" r="22" fill="#22D3EE" opacity="0.6" />
+          <circle class="logo-dot" cx="256" cy="204" r="14" fill="#FFFFFF" />
+        </svg>
+      </div>
       <div class="brand-badge">
         <span class="badge-pulse"></span>
         <span class="brand-code">p &lt; 0.05</span>
       </div>
       <div class="brand-text">
-        <h1 class="brand-title">PLOT TWIST</h1>
+        <h1 class="brand-title">KENDALL</h1>
         <p class="brand-tagline">Planetary Multi-Decadal Trend &amp; Era Shift Detector &bull; 2000–2025</p>
       </div>
     </div>
@@ -540,6 +574,7 @@
         <button class="speed-btn" data-speed="4">4&times;</button>
       </div>
     </div>
+    <div class="footer-attribution font-mono">Named after the Mann-Kendall trend test.</div>
   </footer>
 
   <!-- Floating Hover Tooltip -->
@@ -566,9 +601,21 @@
     <div class="intro-card">
       <div class="intro-eyebrow">
         <span class="intro-badge">p &lt; 0.05</span>
-        <span>A PLANETARY CLIMATE DETECTIVE STORY</span>
+        <span>PRESENTS</span>
       </div>
-      <h2 class="intro-title">PLOT TWIST</h2>
+      <div class="intro-title-wrap">
+        <svg class="intro-logo-icon" viewBox="0 0 512 512" width="44" height="44" fill="none">
+          <circle cx="256" cy="256" r="176" fill="#060C18" stroke="#16294C" stroke-width="10" />
+          <line x1="80" y1="256" x2="432" y2="256" stroke="#16294C" stroke-width="3" stroke-dasharray="6 6" />
+          <ellipse cx="256" cy="256" rx="88" ry="176" stroke="#16294C" stroke-width="3" stroke-dasharray="6 6" />
+          <line x1="132" y1="308" x2="256" y2="204" stroke="#22D3EE" stroke-width="32" stroke-linecap="round" />
+          <line x1="256" y1="204" x2="380" y2="308" stroke="#FF6B35" stroke-width="32" stroke-linecap="round" />
+          <circle cx="256" cy="204" r="18" fill="#22D3EE" opacity="0.6" />
+          <circle cx="256" cy="204" r="12" fill="#FFFFFF" />
+        </svg>
+        <h2 class="intro-title">KENDALL</h2>
+      </div>
+      <p class="intro-tagline">Find the trends that are real.</p>
       <p class="intro-lead">
         NASA has observed our changing planet from orbit for over a quarter-century across 304 consecutive months. But when a multi-decadal trend surfaces, is it genuine physical climate change—or a sensor discontinuity between satellite generations?
       </p>

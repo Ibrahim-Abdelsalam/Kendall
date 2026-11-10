@@ -1,4 +1,4 @@
-# Plot Twist - Goal 1: Verified Precipitation Trend Pipeline
+# Kendall - Goal 1: Verified Precipitation Trend Pipeline
 
 NASA Space Apps Challenge / Earth Science Variable Trend Detection.
 

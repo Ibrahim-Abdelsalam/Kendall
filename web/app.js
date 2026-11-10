@@ -1,5 +1,5 @@
 /**
- * Plot Twist - Planetary Multi-Decadal Trend & Era Shift Detector (2000–2025)
+ * Kendall - Planetary Multi-Decadal Trend & Era Shift Detector (2000–2025)
  * Mission Control Architecture for Planetary Data Detectives
  * Pair-programmed for NASA Space Apps / Advanced Agentic Coding
  */
@@ -91,7 +91,7 @@
   // Global State
   let savedProj = 'globe';
   try {
-    const sp = localStorage.getItem('plottwist_projection');
+    const sp = localStorage.getItem('kendall_projection') || localStorage.getItem('plottwist_projection');
     if (sp === 'mercator' || sp === 'globe' || sp === 'flat') {
       savedProj = sp === 'flat' ? 'mercator' : sp;
     }
@@ -788,7 +788,7 @@
     state.projection = normType;
 
     try {
-      localStorage.setItem('plottwist_projection', normType);
+      localStorage.setItem('kendall_projection', normType);
     } catch (e) {}
 
     const projGroup = document.getElementById('proj-toggle-group');
@@ -3515,7 +3515,7 @@
 
   // Expose for testing & telemetry inspection
   window.appState = state;
-  window.plotTwist = {
+  window.kendall = {
     state,
     setProjection,
     toggleTilt,
@@ -3532,6 +3532,7 @@
     getShareableHash,
     parseAndApplyHash,
   };
+  window.plotTwist = window.kendall; // Backwards-compatible alias for existing tests
 
   window.addEventListener('DOMContentLoaded', init);
 })();

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <filter id="dot-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background Tile (#0B1630) with 15% safe margin buffer -->
+  <rect width="512" height="512" rx="108" fill="#0B1630" />
+
+  <!-- The Earth (radius 176, centered at 256, 256 -> margin 80px = 15.6%) -->
+  <circle cx="256" cy="256" r="176" fill="#060C18" stroke="#16294C" stroke-width="6" />
+
+  <!-- Subtle Geometric Earth Grid Lines -->
+  <line x1="80" y1="256" x2="432" y2="256" stroke="#16294C" stroke-width="2.5" stroke-dasharray="6 6" />
+  <path d="M 104 186 Q 256 214 408 186" fill="none" stroke="#16294C" stroke-width="2" stroke-opacity="0.4" />
+  <path d="M 104 326 Q 256 298 408 326" fill="none" stroke="#16294C" stroke-width="2" stroke-opacity="0.4" />
+  <line x1="256" y1="80" x2="256" y2="432" stroke="#16294C" stroke-width="2" stroke-opacity="0.4" />
+  <ellipse cx="256" cy="256" rx="88" ry="176" fill="none" stroke="#16294C" stroke-width="2.5" stroke-dasharray="6 6" />
+
+  <!-- Bold Trend Line (Splits at the Middle) -->
+  <!-- Left Half: Cyan Sloping Up -->
+  <line class="kendall-line-left" x1="132" y1="308" x2="256" y2="204" stroke="#22D3EE" stroke-width="28" stroke-linecap="round" />
+
+  <!-- Right Half: Orange Sloping Down -->
+  <line class="kendall-line-right" x1="256" y1="204" x2="380" y2="308" stroke="#FF6B35" stroke-width="28" stroke-linecap="round" />
+
+  <!-- Glowing Dot at the Split Point -->
+  <circle class="kendall-dot-glow" cx="256" cy="204" r="18" fill="#22D3EE" opacity="0.45" filter="url(#dot-glow)" />
+  <circle class="kendall-dot-core" cx="256" cy="204" r="11" fill="#FFFFFF" />
+</svg>

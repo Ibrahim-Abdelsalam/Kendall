@@ -1,5 +1,5 @@
 /* ==========================================================================
-   PLOT TWIST — NASA MISSION CONTROL DESIGN SYSTEM
+   KENDALL — NASA MISSION CONTROL DESIGN SYSTEM
    Planetary Multi-Decadal Trend & Era Shift Detector (2000–2025)
    Condensed Technical Display | IBM Plex Mono | Hairline Cyan Guides
    ========================================================================== */
@@ -380,6 +380,64 @@ button, input, select {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+}
+
+.brand-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--radius-none);
+  border: 1px solid var(--border-guide);
+  background: #0B1630;
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.2);
+}
+.brand-logo-svg {
+  width: 26px;
+  height: 26px;
+  display: block;
+}
+.logo-trend-left {
+  stroke-dasharray: 200;
+  stroke-dashoffset: 200;
+  animation: logoDrawInLeft 0.85s cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards;
+}
+.logo-trend-right {
+  stroke-dasharray: 200;
+  stroke-dashoffset: 200;
+  animation: logoDrawInRight 0.85s cubic-bezier(0.16, 1, 0.3, 1) 0.35s forwards;
+}
+.logo-dot-glow,
+.logo-dot {
+  opacity: 0;
+  transform-origin: 256px 204px;
+  animation: logoDotPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.75s forwards;
+}
+@keyframes logoDrawInLeft {
+  from { stroke-dashoffset: 200; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes logoDrawInRight {
+  from { stroke-dashoffset: 200; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes logoDotPop {
+  from { opacity: 0; transform: scale(0.2); }
+  to { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo-trend-left,
+  .logo-trend-right {
+    stroke-dashoffset: 0 !important;
+    animation: none !important;
+  }
+  .logo-dot-glow,
+  .logo-dot {
+    opacity: 1 !important;
+    animation: none !important;
+  }
 }
 
 .brand-badge {
@@ -2072,7 +2130,8 @@ button, input, select {
   left: 50%;
   transform: translateX(-50%);
   width: min(940px, calc(100vw - 36px));
-  height: 64px;
+  height: auto;
+  min-height: 64px;
   z-index: 50;
   background: var(--bg-panel);
   backdrop-filter: blur(16px);
@@ -2081,8 +2140,21 @@ button, input, select {
   border-radius: var(--radius-panel);
   box-shadow: var(--shadow-console);
   display: flex;
+  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  padding: 0 var(--space-4);
+  padding: 8px var(--space-4) 6px var(--space-4);
+  gap: 4px;
+}
+
+.footer-attribution {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  text-align: center;
+  width: 100%;
 }
 
 .scrubber-controls {
@@ -2343,6 +2415,20 @@ button, input, select {
   font-family: var(--font-mono);
   font-size: 11px;
 }
+.intro-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.intro-logo-icon {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: var(--radius-none);
+  border: 1px solid var(--border-guide);
+  background: #0B1630;
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.3);
+}
 .intro-title {
   font-family: var(--font-heading);
   font-size: 48px;
@@ -2350,6 +2436,16 @@ button, input, select {
   letter-spacing: var(--tracking-widest);
   color: var(--text-bright);
   line-height: 1.08;
+}
+.intro-tagline {
+  font-family: var(--font-heading);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--cyan-accent);
+  margin-top: -6px;
+  margin-bottom: 2px;
 }
 .intro-lead {
   font-size: 15.5px;

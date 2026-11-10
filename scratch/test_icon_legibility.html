@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Kendall Icon Legibility Test</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #070B12;
+      color: #E2E8F0;
+      font-family: 'Inter', sans-serif;
+      padding: 40px;
+    }
+    h1 {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 28px;
+      letter-spacing: 0.05em;
+      color: #22D3EE;
+      margin-bottom: 24px;
+      text-transform: uppercase;
+    }
+    .grid {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+    .section-title {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+      color: #94A3B8;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      background: #0B1630;
+      border: 1px solid rgba(34, 211, 238, 0.25);
+      padding: 20px 24px;
+      border-radius: 4px;
+    }
+    .icon-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .icon-box span {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: #64748B;
+    }
+    .simulated-tab {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #182234;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-bottom: none;
+      padding: 8px 16px;
+      border-radius: 8px 8px 0 0;
+      width: 280px;
+      font-size: 12px;
+      color: #E2E8F0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Kendall &bull; Icon Legibility &amp; Multi-Scale Audit</h1>
+  <div class="grid">
+    <div>
+      <div class="section-title">Multi-Resolution Rendering (SVG &amp; Downscaled PNG)</div>
+      <div class="row">
+        <div class="icon-box">
+          <img src="http://localhost:8000/icons/favicon-16x16.png" width="16" height="16" />
+          <span>16 &times; 16 (PNG)</span>
+        </div>
+        <div class="icon-box">
+          <img src="http://localhost:8000/icons/favicon.svg" width="16" height="16" />
+          <span>16 &times; 16 (SVG)</span>
+        </div>
+        <div class="icon-box">
+          <img src="http://localhost:8000/icons/favicon-32x32.png" width="32" height="32" />
+          <span>32 &times; 32 (PNG)</span>
+        </div>
+        <div class="icon-box">
+          <img src="http://localhost:8000/icons/favicon.svg" width="32" height="32" />
+          <span>32 &times; 32 (SVG)</span>
+        </div>
+        <div class="icon-box">
+          <img src="http://localhost:8000/icons/apple-touch-icon.png" width="48" height="48" style="border-radius: 10px;" />
+          <span>48 &times; 48</span>
+        </div>
+        <div class="icon-box">
+          <img src="http://localhost:8000/icons/apple-touch-icon.png" width="64" height="64" style="border-radius: 14px;" />
+          <span>64 &times; 64</span>
+        </div>
+        <div class="icon-box">
+          <img src="http://localhost:8000/icons/icon-192.png" width="96" height="96" style="border-radius: 20px;" />
+          <span>96 &times; 96 (PWA)</span>
+        </div>
+        <div class="icon-box">
+          <img src="http://localhost:8000/icons/kendall.svg" width="128" height="128" />
+          <span>128 &times; 128 (Master)</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Browser Tab Simulation</div>
+      <div class="row" style="background: #070D19;">
+        <div class="simulated-tab">
+          <img src="http://localhost:8000/icons/favicon-32x32.png" width="16" height="16" />
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">p &lt; 0.05 / Kendall | Planetary Multi-Decadal...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

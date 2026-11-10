@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="32" height="32">
+  <defs>
+    <filter id="dot-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="#0B1630" />
+  <circle cx="256" cy="256" r="176" fill="#060C18" stroke="#16294C" stroke-width="8" />
+  <line x1="80" y1="256" x2="432" y2="256" stroke="#16294C" stroke-width="3" stroke-dasharray="6 6" />
+  <ellipse cx="256" cy="256" rx="88" ry="176" fill="none" stroke="#16294C" stroke-width="3" stroke-dasharray="6 6" />
+  <line x1="132" y1="308" x2="256" y2="204" stroke="#22D3EE" stroke-width="32" stroke-linecap="round" />
+  <line x1="256" y1="204" x2="380" y2="308" stroke="#FF6B35" stroke-width="32" stroke-linecap="round" />
+  <circle cx="256" cy="204" r="22" fill="#22D3EE" opacity="0.6" filter="url(#dot-glow)" />
+  <circle cx="256" cy="204" r="14" fill="#FFFFFF" />
+</svg>
