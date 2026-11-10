@@ -27,35 +27,54 @@
     { id: 'gldas_temp', name: '2m Air Temp', agency: 'GLDAS Noah 2.1', unit: '°C/dec' },
     { id: 'gldas_evap', name: 'Evapotranspiration', agency: 'GLDAS Noah 2.1', unit: 'mm/mo/dec' },
     { id: 'merra2_aod', name: 'Aerosol Optical Depth', agency: 'MERRA-2 550nm', unit: 'AOD/dec' },
+    { id: 'gldas_swe', name: 'Snow Water Equiv', agency: 'GLDAS Noah 2.1', unit: 'kg/m²/dec' },
+    { id: 'gldas_snow_depth', name: 'Snow Depth', agency: 'GLDAS Noah 2.1', unit: 'm/dec' },
+    { id: 'merra2_ts', name: 'Skin Temp (Land+Sea)', agency: 'MERRA-2 M2TMNXSLV', unit: '°C/dec' },
+    { id: 'merra2_wind', name: '10m Wind Speed', agency: 'MERRA-2 M2TMNXSLV', unit: 'm/s/dec' },
+    { id: 'merra2_ps', name: 'Surface Pressure', agency: 'MERRA-2 M2TMNXSLV', unit: 'hPa/dec' },
+    { id: 'merra2_tqv', name: 'Column Water Vapor', agency: 'MERRA-2 M2TMNXSLV', unit: 'kg/m²/dec' },
   ];
 
   const TOUR_CASES = [
     {
-      caseNum: 'CASE 1 OF 3',
+      caseNum: 'CASE 1 OF 4',
       title: 'Amazon Basin: Genuine Drought or Sensor Break?',
       lat: -3.75,
       lon: -61.25,
       varId: 'gpm_precip',
       name: 'Amazon Basin, South America',
+      season: 'ALL',
       body: 'A steep drying trend of −9.27 mm/month/decade dominates the Amazon. Yet the trend flips from positive (+5.38 mm) under TRMM to deeply negative (−23.29 mm) under GPM across the 2014 transition. Because neither sub-period is significant alone, this highlights the challenge of separating real physical droughts (2015/16, 2023/24) from sensor discontinuities.',
     },
     {
-      caseNum: 'CASE 2 OF 3',
+      caseNum: 'CASE 2 OF 4',
       title: 'Sahel Corridor: The Greening Recovery Debate',
       lat: 13.75,
       lon: 13.75,
       varId: 'gpm_precip',
       name: 'Sahel Corridor, North-Central Africa',
+      season: 'ALL',
       body: 'Rainfall in the African Sahel shows a weakly positive trend (+0.26 mm/mo/decade in IMERG, +0.48 mm in GLDAS). While popular narratives hail a full "Sahel greening recovery," the autocorrelation-aware test shows p = 0.071 (not significant at α = 0.05). Trend over 2000–2025 remains modest.',
     },
     {
-      caseNum: 'CASE 3 OF 3',
+      caseNum: 'CASE 3 OF 4',
       title: 'Tibetan Plateau: Intense Alpine Thermal Amplification',
       lat: 33.75,
       lon: 81.25,
       varId: 'gldas_temp',
       name: 'Tibetan Plateau / Himalayas',
+      season: 'ALL',
       body: 'The strongest Northern Hemisphere warming hotspot in the dataset occurs across the Tibetan Plateau (+2.75°C/decade). Autocorrelation-aware p-value is 3.45e-11 and FDR q is 2.48e-10. High-elevation amplification is verified with sustained, unmistakable warming.',
+    },
+    {
+      caseNum: 'CASE 4 OF 4',
+      title: 'Central Canada: Summer Wildfire Smoke Surge',
+      lat: 53.75,
+      lon: -106.25,
+      varId: 'merra2_aod',
+      name: 'Central Canada Boreal, North America',
+      season: 'JJA',
+      body: 'Across all months, Canadian boreal AOD shows a modest trend (+0.009/dec). But isolating June–July–August (summer wildfire season) reveals an intense +0.065/decade surge (>7× steeper, p = 0.022), driven by historic boreal megafires in 2021, 2023 (peak AOD 0.50), and 2025. Seasonal slicing unmasks trends hidden by full-year averages.',
     },
   ];
 
@@ -107,6 +126,18 @@
     inspectorData: null,
     chartDates: null,
     chartSeries: null,
+
+    // Step 1-5 Custom Analysis State
+    selectionMode: 'point', // 'point' or 'region'
+    isDrawingRegion: false,
+    drawStartLngLat: null,
+    regionBbox: { s: -15, n: 5, w: -75, e: -45 }, // default Amazon Basin
+    regionHandles: [],
+    startYear: 2000,
+    endYear: 2025,
+    seasonFilter: 'ALL', // 'ALL', 'DJF', 'MAM', 'JJA', 'SON', 'CUSTOM'
+    customMonths: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    analysisChoicesCount: 0,
   };
 
   // --- Utility: Animated Number Counter ---
@@ -687,6 +718,34 @@
           },
         });
 
+        // Interactive Region Selection GeoJSON Layer (Fill & Outline)
+        map.addSource('region-selection', {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: [],
+          },
+        });
+        map.addLayer({
+          id: 'region-fill',
+          type: 'fill',
+          source: 'region-selection',
+          paint: {
+            'fill-color': '#22D3EE',
+            'fill-opacity': 0.18,
+          },
+        });
+        map.addLayer({
+          id: 'region-outline',
+          type: 'line',
+          source: 'region-selection',
+          paint: {
+            'line-color': '#22D3EE',
+            'line-width': 1.8,
+            'line-dasharray': [3, 2],
+          },
+        });
+
         // Intro globe slow spin (only runs when in globe view)
         let bearing = 0;
         function spinGlobe() {
@@ -972,90 +1031,713 @@
       .addTo(state.map);
   }
 
-  // --- Client-Side Statistical Calculations (Sen's Slope, MK, CI) ---
-  function computeClientStats(series) {
-    const validSeries = [];
-    const timeIndices = [];
-    for (let k = 0; k < series.length; k++) {
-      if (series[k] !== null && !isNaN(series[k]) && isFinite(series[k])) {
-        validSeries.push(series[k]);
-        timeIndices.push(k);
+  // --- Region Drawing, Handles & Layer Synchronizer ---
+  function clearRegionHandles() {
+    if (state.regionHandles && state.regionHandles.length > 0) {
+      state.regionHandles.forEach((h) => h.marker.remove());
+      state.regionHandles = [];
+    }
+  }
+
+  function updateRegionGeoJson() {
+    if (!state.map) return;
+    const src = state.map.getSource('region-selection');
+    if (!src) return;
+
+    if (state.selectionMode !== 'region' || !state.regionBbox) {
+      src.setData({ type: 'FeatureCollection', features: [] });
+      clearRegionHandles();
+      return;
+    }
+
+    const { s, n, w, e } = state.regionBbox;
+    const coords = [
+      [
+        [w, s],
+        [e, s],
+        [e, n],
+        [w, n],
+        [w, s],
+      ],
+    ];
+
+    src.setData({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: {
+            type: 'Polygon',
+            coordinates: coords,
+          },
+        },
+      ],
+    });
+
+    updateRegionHandles();
+  }
+
+  function updateRegionHandles() {
+    if (!state.map || state.selectionMode !== 'region' || !state.regionBbox) {
+      clearRegionHandles();
+      return;
+    }
+
+    const { s, n, w, e } = state.regionBbox;
+    const midLat = (s + n) / 2;
+    const midLon = (w + e) / 2;
+
+    const handlePositions = [
+      { id: 'nw', lngLat: [w, n] },
+      { id: 'n', lngLat: [midLon, n] },
+      { id: 'ne', lngLat: [e, n] },
+      { id: 'e', lngLat: [e, midLat] },
+      { id: 'se', lngLat: [e, s] },
+      { id: 's', lngLat: [midLon, s] },
+      { id: 'sw', lngLat: [w, s] },
+      { id: 'w', lngLat: [w, midLat] },
+    ];
+
+    if (state.regionHandles.length === 8) {
+      state.regionHandles.forEach((h, idx) => {
+        h.marker.setLngLat(handlePositions[idx].lngLat);
+      });
+      return;
+    }
+
+    clearRegionHandles();
+
+    handlePositions.forEach((hp) => {
+      const el = document.createElement('div');
+      el.className = 'region-handle-marker';
+      el.dataset.handle = hp.id;
+
+      let isDraggingHandle = false;
+
+      el.addEventListener('mousedown', (ev) => {
+        ev.stopPropagation();
+        isDraggingHandle = true;
+        if (state.map) state.map.dragPan.disable();
+
+        function onMouseMove(moveEv) {
+          if (!isDraggingHandle || !state.map) return;
+          const mapContainer = document.getElementById('map-container');
+          const rect = mapContainer.getBoundingClientRect();
+          const unproj = state.map.unproject([moveEv.clientX - rect.left, moveEv.clientY - rect.top]);
+          const curLng = Math.max(-180, Math.min(180, unproj.lng));
+          const curLat = Math.max(-60, Math.min(60, unproj.lat));
+
+          let { s, n, w, e } = state.regionBbox;
+          if (hp.id === 'n') n = curLat;
+          else if (hp.id === 's') s = curLat;
+          else if (hp.id === 'e') e = curLng;
+          else if (hp.id === 'w') w = curLng;
+          else if (hp.id === 'nw') { n = curLat; w = curLng; }
+          else if (hp.id === 'ne') { n = curLat; e = curLng; }
+          else if (hp.id === 'se') { s = curLat; e = curLng; }
+          else if (hp.id === 'sw') { s = curLat; w = curLng; }
+
+          state.regionBbox = {
+            s: Math.min(s, n),
+            n: Math.max(s, n),
+            w: Math.min(w, e),
+            e: Math.max(w, e),
+          };
+          updateRegionGeoJson();
+          syncBboxInputs();
+        }
+
+        function onMouseUp() {
+          if (isDraggingHandle) {
+            isDraggingHandle = false;
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            if (state.map) state.map.dragPan.enable();
+            recordAnalysisChoice();
+            updateInspector();
+          }
+        }
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+      });
+
+      const marker = new maplibregl.Marker({ element: el, draggable: false })
+        .setLngLat(hp.lngLat)
+        .addTo(state.map);
+
+      state.regionHandles.push({ id: hp.id, marker });
+    });
+  }
+
+  function syncBboxInputs() {
+    const { s, n, w, e } = state.regionBbox;
+    const inpS = document.getElementById('bbox-s');
+    const inpN = document.getElementById('bbox-n');
+    const inpW = document.getElementById('bbox-w');
+    const inpE = document.getElementById('bbox-e');
+    if (inpS) inpS.value = s.toFixed(1);
+    if (inpN) inpN.value = n.toFixed(1);
+    if (inpW) inpW.value = w.toFixed(1);
+    if (inpE) inpE.value = e.toFixed(1);
+  }
+
+  function setSelectionMode(mode) {
+    state.selectionMode = mode;
+
+    const group = document.getElementById('selection-mode-group');
+    const btnPoint = document.getElementById('btn-mode-point');
+    const btnRegion = document.getElementById('btn-mode-region');
+    const regionCard = document.getElementById('region-info-card');
+
+    if (group) group.dataset.mode = mode;
+    if (btnPoint) {
+      btnPoint.classList.toggle('active', mode === 'point');
+      btnPoint.setAttribute('aria-checked', mode === 'point' ? 'true' : 'false');
+    }
+    if (btnRegion) {
+      btnRegion.classList.toggle('active', mode === 'region');
+      btnRegion.setAttribute('aria-checked', mode === 'region' ? 'true' : 'false');
+    }
+
+    if (mode === 'point') {
+      if (regionCard) regionCard.classList.add('hidden');
+      if (state.isDrawingRegion) toggleDrawRegion(false);
+      updateRegionGeoJson();
+      dropPinMarker(state.currentPin.lat, state.currentPin.lon);
+    } else {
+      if (regionCard) regionCard.classList.remove('hidden');
+      if (state.pinMarker) {
+        state.pinMarker.remove();
+        state.pinMarker = null;
+      }
+      syncBboxInputs();
+      updateRegionGeoJson();
+    }
+
+    recordAnalysisChoice();
+    updateInspector();
+  }
+
+  function toggleDrawRegion(forceState) {
+    const shouldDraw = forceState !== undefined ? forceState : !state.isDrawingRegion;
+    state.isDrawingRegion = shouldDraw;
+
+    const banner = document.getElementById('draw-mode-banner');
+    const btnDraw = document.getElementById('btn-draw-region');
+    const mapContainer = document.getElementById('map-container');
+
+    if (banner) banner.classList.toggle('hidden', !shouldDraw);
+    if (btnDraw) btnDraw.classList.toggle('active', shouldDraw);
+    if (mapContainer) mapContainer.classList.toggle('draw-mode', shouldDraw);
+
+    if (shouldDraw) {
+      if (state.selectionMode !== 'region') {
+        setSelectionMode('region');
+      }
+      if (state.map) {
+        state.map.dragPan.disable();
+        state.map.touchZoomRotate.disable();
+      }
+    } else {
+      state.drawStartLngLat = null;
+      if (state.map) {
+        state.map.dragPan.enable();
+        state.map.touchZoomRotate.enable();
       }
     }
+  }
 
-    const n = validSeries.length;
-    if (n < 10) {
-      return { slope: 0, p_hr: 1.0, p_plain: 1.0, ci_lower: 0, ci_upper: 0 };
+  const REGION_PRESETS = {
+    world: { name: 'Whole World (60°S to 60°N)', s: -60, n: 60, w: -180, e: 180 },
+    visible: null,
+    amazon: { name: 'Amazon Basin, South America', s: -15, n: 5, w: -75, e: -45 },
+    sahel: { name: 'African Sahel Corridor', s: 10, n: 20, w: -18, e: 35 },
+    canada: { name: 'Central Canada Boreal (Wildfire)', s: 50, n: 62, w: -125, e: -95 },
+    great_plains: { name: 'North American Great Plains', s: 30, n: 48, w: -105, e: -90 },
+    wisconsin: { name: 'Wisconsin Area (Upper Midwest)', s: 42, n: 47, w: -93, e: -87 },
+    sahara: { name: 'Sahara Desert', s: 18, n: 30, w: -12, e: 30 },
+    india: { name: 'Indian Subcontinent', s: 8, n: 35, w: 68, e: 90 },
+    europe: { name: 'Western & Central Europe', s: 36, n: 60, w: -10, e: 30 },
+    pacific: { name: 'Tropical Pacific (ENSO Zone)', s: -10, n: 10, w: 160, e: -90 },
+    arctic: { name: 'Arctic Ocean (Above 60°N - Masked)', s: 65, n: 85, w: -180, e: 180 },
+  };
+
+  function applyPreset(presetKey) {
+    let bbox;
+    if (presetKey === 'visible') {
+      if (!state.map) return;
+      const b = state.map.getBounds();
+      bbox = {
+        s: Math.max(-60, Math.min(60, b.getSouth())),
+        n: Math.max(-60, Math.min(60, b.getNorth())),
+        w: Math.max(-180, Math.min(180, b.getWest())),
+        e: Math.max(-180, Math.min(180, b.getEast())),
+      };
+    } else if (REGION_PRESETS[presetKey]) {
+      bbox = { ...REGION_PRESETS[presetKey] };
+    }
+    if (!bbox) return;
+
+    state.regionBbox = bbox;
+    syncBboxInputs();
+
+    if (state.selectionMode !== 'region') {
+      setSelectionMode('region');
+    } else {
+      updateRegionGeoJson();
+      recordAnalysisChoice();
+      updateInspector();
     }
 
-    // Median pairwise slope
+    if (presetKey !== 'visible' && presetKey !== 'world' && state.map) {
+      const centerLon = (bbox.w + bbox.e) / 2;
+      const centerLat = (bbox.s + bbox.n) / 2;
+      state.map.easeTo({
+        center: [centerLon, centerLat],
+        zoom: 3.0,
+        duration: 800,
+      });
+    }
+  }
+
+  // --- Statistical Functions Verified Against Python pymannkendall ---
+  function normCdf(x) {
+    const a1 = 0.254829592;
+    const a2 = -0.284496736;
+    const a3 = 1.421413741;
+    const a4 = -1.453152027;
+    const a5 = 1.061405429;
+    const p = 0.3275911;
+
+    const sign = x < 0 ? -1 : 1;
+    const absX = Math.abs(x) / Math.SQRT2;
+
+    const t = 1.0 / (1.0 + p * absX);
+    const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-absX * absX);
+
+    return 0.5 * (1.0 + sign * y);
+  }
+
+  function rankdata(arr) {
+    const n = arr.length;
+    const indexed = new Array(n);
+    for (let i = 0; i < n; i++) {
+      indexed[i] = { val: arr[i], idx: i };
+    }
+    indexed.sort((a, b) => a.val - b.val);
+
+    const ranks = new Float64Array(n);
+    let i = 0;
+    while (i < n) {
+      let j = i;
+      while (j < n - 1 && indexed[j + 1].val === indexed[j].val) {
+        j++;
+      }
+      const avgRank = (i + 1 + j + 1) / 2.0;
+      for (let k = i; k <= j; k++) {
+        ranks[indexed[k].idx] = avgRank;
+      }
+      i = j + 1;
+    }
+    return ranks;
+  }
+
+  function computeSensSlope(x) {
+    const n = x.length;
     const slopes = [];
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
-        slopes.push((validSeries[j] - validSeries[i]) / (timeIndices[j] - timeIndices[i]));
+        slopes.push((x[j] - x[i]) / (j - i));
       }
     }
     slopes.sort((a, b) => a - b);
     const mid = Math.floor(slopes.length / 2);
-    const medianMonthlySlope = slopes.length % 2 !== 0 ? slopes[mid] : (slopes[mid - 1] + slopes[mid]) / 2;
-    const slopeDecade = medianMonthlySlope * 120.0;
+    return slopes.length % 2 !== 0 ? slopes[mid] : (slopes[mid - 1] + slopes[mid]) / 2.0;
+  }
 
-    // Mann-Kendall S
+  function computeMannKendall(x, alpha = 0.05) {
+    const n = x.length;
+    if (n < 4) {
+      return { slope: 0, p: 1.0, z: 0, s: 0, var_s: 1.0, trend: 'no trend' };
+    }
+
     let s = 0;
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
-        const diff = validSeries[j] - validSeries[i];
+        const diff = x[j] - x[i];
         if (diff > 0) s += 1;
         else if (diff < 0) s -= 1;
       }
     }
 
-    const v0 = (n * (n - 1) * (2 * n + 5)) / 18.0;
-    let z = 0;
-    if (s > 0) z = (s - 1) / Math.sqrt(v0);
-    else if (s < 0) z = (s + 1) / Math.sqrt(v0);
-
-    function normCdf(val) {
-      const t = 1 / (1 + 0.2316419 * Math.abs(val));
-      const d = 0.3989423 * Math.exp((-val * val) / 2);
-      const prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-      return val > 0 ? 1 - prob : prob;
-    }
-    const p_plain = 2 * (1 - normCdf(Math.abs(z)));
-
-    // Lag-1 Autocorrelation correction (Hamed-Rao)
-    let mean = 0;
-    for (let i = 0; i < n; i++) mean += validSeries[i];
-    mean /= n;
-
-    let num = 0, den = 0;
-    for (let i = 0; i < n - 1; i++) {
-      num += (validSeries[i] - mean) * (validSeries[i + 1] - mean);
-    }
+    const counts = {};
     for (let i = 0; i < n; i++) {
-      den += (validSeries[i] - mean) * (validSeries[i] - mean);
+      counts[x[i]] = (counts[x[i]] || 0) + 1;
     }
-    const r1 = den > 0 ? num / den : 0;
-    let varFactor = 1.0;
-    if (r1 > 0.05) {
-      varFactor = 1 + (2 * r1) / (1 - r1);
-    }
-    const v_adj = v0 * varFactor;
-    let z_hr = 0;
-    if (s > 0) z_hr = (s - 1) / Math.sqrt(v_adj);
-    else if (s < 0) z_hr = (s + 1) / Math.sqrt(v_adj);
-    const p_hr = 2 * (1 - normCdf(Math.abs(z_hr)));
 
-    // 95% Confidence Interval
-    const z_alpha = 1.96;
-    const c_alpha = z_alpha * Math.sqrt(v0);
+    let tieTerm = 0;
+    for (const val in counts) {
+      const tp = counts[val];
+      if (tp > 1) {
+        tieTerm += tp * (tp - 1) * (2 * tp + 5);
+      }
+    }
+
+    const var_s = (n * (n - 1) * (2 * n + 5) - tieTerm) / 18.0;
+
+    let z = 0;
+    if (s > 0) {
+      z = (s - 1) / Math.sqrt(var_s);
+    } else if (s < 0) {
+      z = (s + 1) / Math.sqrt(var_s);
+    }
+
+    const p = 2.0 * (1.0 - normCdf(Math.abs(z)));
+    const slope = computeSensSlope(x);
+
+    return {
+      slope,
+      p: Math.min(1.0, Math.max(0.0, p)),
+      z,
+      s,
+      var_s,
+      trend: z > 0 && p < alpha ? 'increasing' : z < 0 && p < alpha ? 'decreasing' : 'no trend',
+    };
+  }
+
+  function computeHamedRao(x, alpha = 0.05) {
+    const n = x.length;
+    if (n < 4) {
+      return computeMannKendall(x, alpha);
+    }
+
+    const base = computeMannKendall(x, alpha);
+    const s = base.s;
+    const base_var_s = base.var_s;
+    const slope = base.slope;
+
+    const x_detrend = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      x_detrend[i] = x[i] - (i + 1) * slope;
+    }
+
+    const ranks = rankdata(x_detrend);
+
+    let sumR = 0;
+    for (let i = 0; i < n; i++) sumR += ranks[i];
+    const meanR = sumR / n;
+
+    const y = new Float64Array(n);
+    for (let i = 0; i < n; i++) y[i] = ranks[i] - meanR;
+
+    let varY = 0;
+    for (let i = 0; i < n; i++) varY += y[i] * y[i];
+
+    if (varY === 0) {
+      return base;
+    }
+
+    const z_crit = 1.959963984540054;
+    const bound = z_crit / Math.sqrt(n);
+
+    let sni = 0;
+    for (let lag = 1; lag < n; lag++) {
+      let cov = 0;
+      for (let t = 0; t < n - lag; t++) {
+        cov += y[t] * y[t + lag];
+      }
+      const r_lag = cov / varY;
+
+      if (Math.abs(r_lag) > bound) {
+        sni += (n - lag) * (n - lag - 1) * (n - lag - 2) * r_lag;
+      }
+    }
+
+    const n_ns = 1.0 + (2.0 / (n * (n - 1) * (n - 2))) * sni;
+    const var_s_mod = base_var_s * n_ns;
+
+    let z_mod = 0;
+    if (var_s_mod > 0) {
+      if (s > 0) z_mod = (s - 1) / Math.sqrt(var_s_mod);
+      else if (s < 0) z_mod = (s + 1) / Math.sqrt(var_s_mod);
+    } else {
+      z_mod = base.z;
+    }
+
+    const p_mod = 2.0 * (1.0 - normCdf(Math.abs(z_mod)));
+
+    return {
+      slope,
+      p: Math.min(1.0, Math.max(0.0, p_mod)),
+      p_plain: base.p,
+      z: z_mod,
+      s,
+      var_s: var_s_mod,
+      n_ns,
+      trend: z_mod > 0 && p_mod < alpha ? 'increasing' : z_mod < 0 && p_mod < alpha ? 'decreasing' : 'no trend',
+    };
+  }
+
+  function computeFullStats(values, timePoints, slopeMultiplier = 120.0) {
+    const n = values.length;
+    if (n < 4) {
+      return {
+        slopeDecade: 0,
+        p_hr: 1.0,
+        p_plain: 1.0,
+        ci_lower: 0,
+        ci_upper: 0,
+        mean: 0,
+        std: 1.0,
+        isSig: false,
+        isTrending: false,
+      };
+    }
+
+    const slopes = [];
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        slopes.push((values[j] - values[i]) / (timePoints[j] - timePoints[i]));
+      }
+    }
+    slopes.sort((a, b) => a - b);
+    const mid = Math.floor(slopes.length / 2);
+    const medianSlope = slopes.length % 2 !== 0 ? slopes[mid] : (slopes[mid - 1] + slopes[mid]) / 2.0;
+    const slopeDecade = medianSlope * slopeMultiplier;
+
+    const hr = computeHamedRao(values, 0.05);
+    const p_hr = hr.p;
+    const p_plain = hr.p_plain !== undefined ? hr.p_plain : hr.p;
+
+    const z_alpha = 1.959963984540054;
+    const c_alpha = z_alpha * Math.sqrt(hr.var_s || (n * (n - 1) * (2 * n + 5)) / 18.0);
     const m1 = Math.floor((slopes.length - c_alpha) / 2);
     const m2 = Math.floor((slopes.length + c_alpha) / 2);
-    const ci_lower = (slopes[Math.max(0, m1)] || slopes[0]) * 120.0;
-    const ci_upper = (slopes[Math.min(slopes.length - 1, m2)] || slopes[slopes.length - 1]) * 120.0;
-    const std = n > 1 && den > 0 ? Math.sqrt(den / n) : 1.0;
+    const ci_lower = (slopes[Math.max(0, m1)] || slopes[0]) * slopeMultiplier;
+    const ci_upper = (slopes[Math.min(slopes.length - 1, m2)] || slopes[slopes.length - 1]) * slopeMultiplier;
 
-    return { slope: slopeDecade, p_hr, p_plain, ci_lower, ci_upper, mean, std };
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += values[i];
+    const mean = sum / n;
+
+    let sumSq = 0;
+    for (let i = 0; i < n; i++) sumSq += (values[i] - mean) * (values[i] - mean);
+    const std = n > 1 ? Math.sqrt(sumSq / (n - 1)) : 1.0;
+
+    const isSig = p_hr < 0.05;
+    const isTrending = !isSig && (p_hr < 0.1 || p_plain < 0.05);
+
+    return {
+      slopeDecade,
+      p_hr,
+      p_plain,
+      ci_lower,
+      ci_upper,
+      mean,
+      std,
+      isSig,
+      isTrending,
+    };
+  }
+
+  // --- Area-Weighted Regional Series Computation ---
+  function computeRegionalTimeSeries(varId, bbox) {
+    const varData = state.cache[varId];
+    if (!varData) return null;
+
+    const { meta, trend, anomalies } = varData;
+    const comp = meta.compression || {};
+    const scale = comp.anom_scale_factor || comp.scale || 0.01;
+    const offset = comp.anom_offset || comp.offset || 0.0;
+    const nCells = N_LATS * N_LONS;
+
+    const { s, n, w, e } = bbox;
+    const minLat = Math.min(s, n);
+    const maxLat = Math.max(s, n);
+
+    const selectedCells = [];
+    let totalCellsInBbox = 0;
+    let totalAreaKm2 = 0;
+
+    for (let i = 0; i < N_LATS; i++) {
+      const lat = TARGET_LATS[i];
+      if (lat < minLat - 1.25 || lat > maxLat + 1.25) continue;
+
+      const cosLat = Math.cos((lat * Math.PI) / 180);
+      const cellAreaKm2 = 77196.5 * cosLat;
+
+      for (let j = 0; j < N_LONS; j++) {
+        const lon = TARGET_LONS[j];
+        let insideLon = false;
+        if (w <= e) {
+          insideLon = lon >= w - 1.25 && lon <= e + 1.25;
+        } else {
+          insideLon = lon >= w - 1.25 || lon <= e + 1.25;
+        }
+
+        if (insideLon) {
+          totalCellsInBbox++;
+          const isValid = trend.valid[i][j] === 1;
+          if (isValid) {
+            totalAreaKm2 += cellAreaKm2;
+            selectedCells.push({
+              latIdx: i,
+              lonIdx: j,
+              flatIdx: i * N_LONS + j,
+              weight: cosLat,
+            });
+          }
+        }
+      }
+    }
+
+    const validCount = selectedCells.length;
+    if (validCount === 0) {
+      return {
+        series: new Array(state.totalMonths).fill(null),
+        validCount: 0,
+        totalCount: totalCellsInBbox,
+        areaKm2: 0,
+        isMasked: true,
+      };
+    }
+
+    let sumWeight = 0;
+    for (let k = 0; k < validCount; k++) {
+      sumWeight += selectedCells[k].weight;
+    }
+
+    const regionalSeries = [];
+    for (let m = 0; m < state.totalMonths; m++) {
+      const monthOffset = m * nCells;
+      let weightedSum = 0;
+      let monthWeight = 0;
+
+      for (let k = 0; k < validCount; k++) {
+        const cell = selectedCells[k];
+        const rawInt = anomalies[monthOffset + cell.flatIdx];
+        if (rawInt !== -32768) {
+          const val = rawInt * scale + offset;
+          weightedSum += val * cell.weight;
+          monthWeight += cell.weight;
+        }
+      }
+
+      if (monthWeight > 0) {
+        regionalSeries.push(weightedSum / monthWeight);
+      } else {
+        regionalSeries.push(null);
+      }
+    }
+
+    return {
+      series: regionalSeries,
+      validCount,
+      totalCount: totalCellsInBbox,
+      areaKm2: totalAreaKm2,
+      isMasked: false,
+    };
+  }
+
+  // --- Extract Time Period & Seasonal Series for Analysis ---
+  function extractAnalysisSeries(fullMonthlySeries, startYear, endYear, seasonFilter, customMonths) {
+    const baseYear = 2000;
+    const baseMonth = 6;
+    const dates = [];
+    const values = [];
+    const timePoints = [];
+
+    const isSeasonal = seasonFilter !== 'ALL';
+
+    if (!isSeasonal) {
+      let tIdx = 0;
+      for (let m = 0; m < fullMonthlySeries.length; m++) {
+        const ymYear = baseYear + Math.floor((baseMonth - 1 + m) / 12);
+        const ymM = ((baseMonth - 1 + m) % 12) + 1;
+        if (ymYear >= startYear && ymYear <= endYear) {
+          const val = fullMonthlySeries[m];
+          if (val !== null && !isNaN(val) && isFinite(val)) {
+            dates.push(`${ymYear}-${String(ymM).padStart(2, '0')}`);
+            values.push(val);
+            timePoints.push(tIdx);
+          }
+          tIdx++;
+        }
+      }
+      return {
+        dates,
+        values,
+        timePoints,
+        isAnnual: false,
+        slopeMultiplier: 120.0,
+      };
+    }
+
+    let targetMonths = [];
+    if (seasonFilter === 'DJF') targetMonths = [12, 1, 2];
+    else if (seasonFilter === 'MAM') targetMonths = [3, 4, 5];
+    else if (seasonFilter === 'JJA') targetMonths = [6, 7, 8];
+    else if (seasonFilter === 'SON') targetMonths = [9, 10, 11];
+    else if (seasonFilter === 'CUSTOM') targetMonths = customMonths || [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+    for (let y = startYear; y <= endYear; y++) {
+      const yearVals = [];
+      for (let m = 0; m < fullMonthlySeries.length; m++) {
+        const ymYear = baseYear + Math.floor((baseMonth - 1 + m) / 12);
+        const ymM = ((baseMonth - 1 + m) % 12) + 1;
+
+        let match = false;
+        if (seasonFilter === 'DJF') {
+          if ((ymYear === y - 1 && ymM === 12) || (ymYear === y && (ymM === 1 || ymM === 2))) {
+            match = true;
+          }
+        } else {
+          if (ymYear === y && targetMonths.includes(ymM)) {
+            match = true;
+          }
+        }
+
+        if (match) {
+          const val = fullMonthlySeries[m];
+          if (val !== null && !isNaN(val) && isFinite(val)) {
+            yearVals.push(val);
+          }
+        }
+      }
+
+      if (yearVals.length > 0) {
+        let sum = 0;
+        for (let k = 0; k < yearVals.length; k++) sum += yearVals[k];
+        const avg = sum / yearVals.length;
+        dates.push(String(y));
+        values.push(avg);
+        timePoints.push(y - startYear);
+      }
+    }
+
+    return {
+      dates,
+      values,
+      timePoints,
+      isAnnual: true,
+      slopeMultiplier: 10.0,
+    };
+  }
+
+  // --- Utilities: Formatting & Multiple-Testing Counter ---
+  function formatNumber(num) {
+    return Math.round(num).toLocaleString('en-US');
+  }
+
+  function recordAnalysisChoice() {
+    state.analysisChoicesCount++;
+    const card = document.getElementById('analysis-counter-card');
+    const text = document.getElementById('counter-notice-text');
+    if (state.analysisChoicesCount >= 5 && card && text) {
+      text.textContent = `You have tested ${state.analysisChoicesCount} combinations. With this many looks, a p below 0.05 will appear by chance about 1 time in 20. These p-values are not adjusted for multiple testing.`;
+      card.classList.remove('hidden');
+    }
   }
 
   // --- ECharts Time-Series Graph ---
@@ -1076,21 +1758,80 @@
     });
   }
 
-  function updateTimeSeriesChart(dates, anomalies, rollingMean, slopeDecade) {
+  function updateTimeSeriesChart(dates, anomalies, rollingMean, slopeDecade, isAnnual = false) {
     if (!state.charts.timeseries) return;
 
     const n = anomalies.length;
-    const monthlySlope = slopeDecade / 120.0;
+    const stepSlope = isAnnual ? slopeDecade / 10.0 : slopeDecade / 120.0;
     let sumY = 0;
     for (let i = 0; i < n; i++) sumY += anomalies[i];
     const meanY = sumY / n;
     const meanX = (n - 1) / 2;
-    const intercept = meanY - monthlySlope * meanX;
+    const intercept = meanY - stepSlope * meanX;
 
     const trendLine = [];
     for (let i = 0; i < n; i++) {
-      trendLine.push(intercept + monthlySlope * i);
+      trendLine.push(intercept + stepSlope * i);
     }
+
+    const markLineData = [];
+    if (state.startYear <= 2014 && state.endYear >= 2014) {
+      markLineData.push({ xAxis: isAnnual ? '2014' : '2014-01' });
+    }
+
+    const seriesConfig = [
+      {
+        name: isAnnual ? 'Seasonal Mean' : 'Monthly Anomaly',
+        type: 'line',
+        data: anomalies,
+        symbol: isAnnual ? 'circle' : 'none',
+        symbolSize: isAnnual ? 5 : 0,
+        itemStyle: isAnnual ? { color: '#22D3EE' } : undefined,
+        lineStyle: { width: isAnnual ? 1.8 : 1, color: isAnnual ? '#22D3EE' : '#475569' },
+        areaStyle: { color: isAnnual ? 'rgba(34, 211, 238, 0.12)' : 'rgba(71, 85, 105, 0.15)' },
+        animationDuration: 800,
+        animationEasing: 'cubicOut',
+      },
+    ];
+
+    if (!isAnnual && rollingMean && rollingMean.length > 0) {
+      seriesConfig.push({
+        name: '12-Mo Centered Mean',
+        type: 'line',
+        data: rollingMean,
+        smooth: true,
+        symbol: 'none',
+        lineStyle: { width: 2.2, color: '#22D3EE' },
+        animationDuration: 1200,
+        animationDelay: 200,
+        animationEasing: 'cubicOut',
+      });
+    }
+
+    seriesConfig.push({
+      name: "Sen's Slope Trend",
+      type: 'line',
+      data: trendLine,
+      symbol: 'none',
+      lineStyle: { width: 1.8, type: 'dashed', color: '#FF6B35' },
+      animationDuration: 1400,
+      animationDelay: 400,
+      animationEasing: 'cubicOut',
+      markLine: {
+        silent: true,
+        symbol: 'none',
+        label: {
+          show: true,
+          position: 'insideStartTop',
+          formatter: '2014 Transition',
+          color: '#F59E0B',
+          fontSize: 9,
+          fontFamily: 'IBM Plex Mono, monospace',
+        },
+        lineStyle: { color: '#F59E0B', type: 'dotted', width: 1.2 },
+        data: markLineData,
+      },
+    });
 
     const option = {
       backgroundColor: 'transparent',
@@ -1119,7 +1860,7 @@
           color: '#7E91A8',
           fontFamily: 'IBM Plex Mono, monospace',
           fontSize: 9,
-          interval: 59,
+          interval: Math.max(1, Math.floor(dates.length / 5)),
         },
       },
       yAxis: {
@@ -1127,60 +1868,14 @@
         splitLine: { lineStyle: { color: 'rgba(34, 211, 238, 0.10)' } },
         axisLabel: { color: '#7E91A8', fontFamily: 'IBM Plex Mono, monospace', fontSize: 9 },
       },
-      series: [
-        {
-          name: 'Monthly Anomaly',
-          type: 'line',
-          data: anomalies,
-          symbol: 'none',
-          lineStyle: { width: 1, color: '#475569' },
-          areaStyle: { color: 'rgba(71, 85, 105, 0.15)' },
-          animationDuration: 800,
-          animationEasing: 'cubicOut',
-        },
-        {
-          name: '12-Mo Centered Mean',
-          type: 'line',
-          data: rollingMean,
-          smooth: true,
-          symbol: 'none',
-          lineStyle: { width: 2.2, color: '#22D3EE' },
-          animationDuration: 1200,
-          animationDelay: 200,
-          animationEasing: 'cubicOut',
-        },
-        {
-          name: "Sen's Slope Trend",
-          type: 'line',
-          data: trendLine,
-          symbol: 'none',
-          lineStyle: { width: 1.8, type: 'dashed', color: '#FF6B35' },
-          animationDuration: 1400,
-          animationDelay: 400,
-          animationEasing: 'cubicOut',
-          markLine: {
-            silent: true,
-            symbol: 'none',
-            label: {
-              show: true,
-              position: 'insideStartTop',
-              formatter: '2014 Transition',
-              color: '#F59E0B',
-              fontSize: 9,
-              fontFamily: 'IBM Plex Mono, monospace',
-            },
-            lineStyle: { color: '#F59E0B', type: 'dotted', width: 1.2 },
-            data: [{ xAxis: '2014-01' }],
-          },
-        },
-      ],
+      series: seriesConfig,
     };
 
     state.chartDates = dates;
     state.chartSeries = anomalies;
-    state.charts.timeseries.setOption(option);
+    state.charts.timeseries.setOption(option, true);
 
-    if (state.currentMonthIdx != null) {
+    if (state.currentMonthIdx != null && !isAnnual) {
       updateTimeSeriesPlayhead(state.currentMonthIdx);
     }
   }
@@ -1247,9 +1942,13 @@
 
     windows.forEach((w) => {
       const monthCutoff = Math.min(series.length, Math.round(w * 12));
-      const sub = series.slice(0, monthCutoff);
-      const st = computeClientStats(sub);
-      pVals.push(st.p_hr != null ? Math.min(1.0, Math.max(0.0001, st.p_hr)) : 1.0);
+      const sub = series.slice(0, monthCutoff).filter((v) => v !== null && !isNaN(v) && isFinite(v));
+      if (sub.length < 4) {
+        pVals.push(1.0);
+      } else {
+        const hr = computeHamedRao(sub, 0.05);
+        pVals.push(hr.p != null ? Math.min(1.0, Math.max(0.0001, hr.p)) : 1.0);
+      }
     });
 
     const clockStatus = document.getElementById('clock-status-pill');
@@ -1324,81 +2023,162 @@
     const varData = state.cache[state.currentVarId];
     if (!varData) return;
 
-    // Stagger animation on cards
+    if (latIdx === undefined) latIdx = state.cellIndex.latIdx;
+    if (lonIdx === undefined) lonIdx = state.cellIndex.lonIdx;
+
     gsap.fromTo(
       ['#verdict-card', '.chart-card', '.lineup-card'],
       { opacity: 0.5, y: 6 },
       { opacity: 1, y: 0, duration: 0.35, stagger: 0.06, ease: 'power2.out' }
     );
 
+    const isPointMode = state.selectionMode === 'point';
+    const isFullRecord = state.startYear === 2000 && state.endYear === 2025;
+    const isAllYear = state.seasonFilter === 'ALL';
+    const isPrecomputedCell = isPointMode && isFullRecord && isAllYear;
+
     const { meta, trend, anomalies } = varData;
-    const slopeScale = trend.slope_scale || 1.0;
-    const rawSlope = trend.slopes[latIdx][lonIdx];
-    const isMasked = trend.valid[latIdx][lonIdx] !== 1 || rawSlope === -32768;
-
-    const coordsEl = document.getElementById('inspector-coords');
-    const nameEl = document.getElementById('inspector-name');
-    if (coordsEl) {
-      coordsEl.textContent = `LAT: ${TARGET_LATS[latIdx].toFixed(2)}°, LON: ${TARGET_LONS[lonIdx].toFixed(2)}°`;
-    }
-
-    const curLat = TARGET_LATS[latIdx];
-    const curLon = TARGET_LONS[lonIdx];
-    let regionName = 'Ocean / Open Water';
-    if (curLat >= -15 && curLat <= 5 && curLon >= -75 && curLon <= -45) regionName = 'Amazon Basin, South America';
-    else if (curLat >= 10 && curLat <= 20 && curLon >= -18 && curLon <= 35) regionName = 'Sahel Corridor, Africa';
-    else if (curLat >= 28 && curLat <= 38 && curLon >= 75 && curLon <= 102) regionName = 'Tibetan Plateau / Himalayas';
-    else if (Math.abs(curLat) > 60) regionName = 'Polar Ice Zone (Masked)';
-    else if (trend.valid[latIdx][lonIdx] === 1) regionName = 'Terrestrial Continental Grid Cell';
-    if (nameEl) nameEl.textContent = regionName;
-
-    const cellOffset = latIdx * N_LONS + lonIdx;
-    const nCells = N_LATS * N_LONS;
-    const series = [];
-    const dates = [];
     const comp = meta.compression || {};
     const scale = comp.anom_scale_factor || comp.scale || 0.01;
     const offset = comp.anom_offset || comp.offset || 0.0;
-    const baseYear = 2000;
-    const baseMonth = 6;
+    const nCells = N_LATS * N_LONS;
 
-    for (let m = 0; m < state.totalMonths; m++) {
-      const ymYear = baseYear + Math.floor((baseMonth - 1 + m) / 12);
-      const ymM = ((baseMonth - 1 + m) % 12) + 1;
-      const dateStr = `${ymYear}-${String(ymM).padStart(2, '0')}`;
-      dates.push(dateStr);
+    const modeIcon = document.getElementById('inspector-mode-icon');
+    const coordsEl = document.getElementById('inspector-coords');
+    const nameEl = document.getElementById('inspector-name');
 
-      if (isMasked) {
-        series.push(null);
-      } else {
-        const valIdx = m * nCells + cellOffset;
-        const rawInt = anomalies[valIdx];
-        series.push(rawInt === -32768 ? null : rawInt * scale + offset);
+    let fullMonthlySeries = [];
+    let isMasked = false;
+    let locationDisplayName = '';
+
+    if (isPointMode) {
+      if (modeIcon) {
+        modeIcon.innerHTML = '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>';
       }
-    }
+      const curLat = TARGET_LATS[latIdx];
+      const curLon = TARGET_LONS[lonIdx];
+      if (coordsEl) {
+        coordsEl.textContent = `LAT: ${curLat.toFixed(2)}°, LON: ${curLon.toFixed(2)}°`;
+      }
 
-    const rollingMean = [];
-    for (let i = 0; i < series.length; i++) {
-      if (i < 5 || i >= series.length - 6 || isMasked) {
-        rollingMean.push(null);
-      } else {
-        let sum = 0, count = 0;
-        for (let k = i - 5; k <= i + 6; k++) {
-          if (series[k] != null) {
-            sum += series[k];
-            count++;
-          }
+      locationDisplayName = 'Ocean / Open Water';
+      if (curLat >= -15 && curLat <= 5 && curLon >= -75 && curLon <= -45) locationDisplayName = 'Amazon Basin, South America';
+      else if (curLat >= 10 && curLat <= 20 && curLon >= -18 && curLon <= 35) locationDisplayName = 'Sahel Corridor, Africa';
+      else if (curLat >= 28 && curLat <= 38 && curLon >= 75 && curLon <= 102) locationDisplayName = 'Tibetan Plateau / Himalayas';
+      else if (curLat >= 50 && curLat <= 62 && curLon >= -125 && curLon <= -95) locationDisplayName = 'Central Canada Boreal';
+      else if (Math.abs(curLat) > 60) locationDisplayName = 'Polar Ice Zone (Masked)';
+      else if (trend.valid[latIdx][lonIdx] === 1) locationDisplayName = 'Terrestrial Continental Grid Cell';
+
+      if (nameEl) nameEl.textContent = locationDisplayName;
+
+      const cellValid = trend.valid[latIdx][lonIdx] === 1;
+      const rawSlope = trend.slopes[latIdx][lonIdx];
+      isMasked = !cellValid || rawSlope === -32768;
+
+      const cellOffset = latIdx * N_LONS + lonIdx;
+      for (let m = 0; m < state.totalMonths; m++) {
+        if (isMasked) {
+          fullMonthlySeries.push(null);
+        } else {
+          const valIdx = m * nCells + cellOffset;
+          const rawInt = anomalies[valIdx];
+          fullMonthlySeries.push(rawInt === -32768 ? null : rawInt * scale + offset);
         }
-        rollingMean.push(count >= 10 ? sum / count : null);
+      }
+    } else {
+      if (modeIcon) {
+        modeIcon.innerHTML = '<rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="2 2"/>';
+      }
+      const { s, n, w, e } = state.regionBbox;
+      if (coordsEl) {
+        coordsEl.textContent = `S: ${s.toFixed(1)}°, N: ${n.toFixed(1)}°, W: ${w.toFixed(1)}°, E: ${e.toFixed(1)}°`;
+      }
+
+      locationDisplayName = 'Custom Geographic Region';
+      Object.keys(REGION_PRESETS).forEach((k) => {
+        const p = REGION_PRESETS[k];
+        if (p && Math.abs(p.s - s) < 1.5 && Math.abs(p.n - n) < 1.5 && Math.abs(p.w - w) < 1.5 && Math.abs(p.e - e) < 1.5) {
+          locationDisplayName = p.name;
+        }
+      });
+      if (nameEl) nameEl.textContent = locationDisplayName;
+
+      const regRes = computeRegionalTimeSeries(state.currentVarId, state.regionBbox);
+      if (regRes) {
+        fullMonthlySeries = regRes.series;
+        isMasked = regRes.isMasked;
+
+        const cellCountEl = document.getElementById('region-cell-count');
+        const areaValEl = document.getElementById('region-area-val');
+        const warnSmall = document.getElementById('region-small-warn');
+        const warnEmpty = document.getElementById('region-empty-warn');
+        const warnMasked = document.getElementById('region-masked-info');
+
+        if (cellCountEl) cellCountEl.textContent = `${regRes.validCount} VALID CELLS (OF ${regRes.totalCount})`;
+        if (areaValEl) areaValEl.textContent = `${formatNumber(regRes.areaKm2)} km²`;
+
+        if (warnSmall) warnSmall.classList.toggle('hidden', regRes.validCount >= 4 || regRes.validCount === 0);
+        if (warnEmpty) warnEmpty.classList.toggle('hidden', regRes.validCount > 0);
+        if (warnMasked) warnMasked.classList.toggle('hidden', regRes.totalCount === regRes.validCount || regRes.validCount === 0);
       }
     }
+
+    const periodBadge = document.getElementById('period-badge');
+    const periodYears = state.endYear - state.startYear + (isAllYear ? 0.3 : 1);
+    if (periodBadge) {
+      periodBadge.textContent = `${state.startYear} – ${state.endYear} (${periodYears.toFixed(1)} YRS)`;
+    }
+
+    const seasonBadge = document.getElementById('season-badge');
+    const seasonNames = {
+      ALL: 'ALL YEAR',
+      DJF: 'DJF (WINTER)',
+      MAM: 'MAM (SPRING)',
+      JJA: 'JJA (SUMMER / SMOKE)',
+      SON: 'SON (AUTUMN)',
+      CUSTOM: 'CUSTOM MONTHS',
+    };
+    if (seasonBadge) {
+      seasonBadge.textContent = seasonNames[state.seasonFilter] || state.seasonFilter;
+    }
+
+    const selTextEl = document.getElementById('verdict-selection-text');
+    const calcBadgeEl = document.getElementById('verdict-calc-badge');
+
+    const seasonLabel = seasonNames[state.seasonFilter] || state.seasonFilter;
+    const periodLabel = `${state.startYear}–${state.endYear}`;
+
+    if (selTextEl) {
+      if (isPointMode) {
+        selTextEl.textContent = `Point: ${TARGET_LATS[latIdx].toFixed(2)}°, ${TARGET_LONS[lonIdx].toFixed(2)}° | ${periodLabel} | ${seasonLabel}`;
+      } else {
+        const areaStr = document.getElementById('region-area-val')?.textContent || '';
+        selTextEl.textContent = `Region: ${locationDisplayName} (${areaStr}) | ${periodLabel} | ${seasonLabel}`;
+      }
+    }
+
+    if (calcBadgeEl) {
+      if (isPrecomputedCell) {
+        calcBadgeEl.textContent = 'Precomputed Telemetry';
+        calcBadgeEl.className = 'verdict-calc-badge precomputed';
+      } else {
+        calcBadgeEl.textContent = '[ Estimate computed in your browser ]';
+        calcBadgeEl.className = 'verdict-calc-badge estimated';
+      }
+    }
+
+    const warnShort = document.getElementById('period-warn-short');
+    const warnBlocked = document.getElementById('period-warn-blocked');
+    const numYears = state.endYear - state.startYear;
+    if (warnShort) warnShort.classList.toggle('hidden', numYears >= 10);
+    if (warnBlocked) warnBlocked.classList.toggle('hidden', numYears >= 5);
 
     if (isMasked) {
       document.getElementById('val-rate').textContent = 'MASKED';
       document.getElementById('val-unit').textContent = '';
       document.getElementById('val-phr').textContent = 'N/A';
       document.getElementById('val-pplain').textContent = 'N/A';
-      document.getElementById('verdict-status-text').textContent = 'CELL MASKED (ICE / OCEAN)';
+      document.getElementById('verdict-status-text').textContent = 'REGION/CELL MASKED (ICE / OCEAN)';
       document.getElementById('verdict-card').className = 'verdict-card state-neutral';
       document.getElementById('verdict-caution-box').classList.add('hidden');
 
@@ -1406,7 +2186,7 @@
         latIdx,
         lonIdx,
         series: [],
-        dates,
+        dates: [],
         rollingMean: [],
         mean: 0,
         std: 1.0,
@@ -1418,15 +2198,53 @@
       return;
     }
 
-    const officialSlopeDecade = rawSlope * slopeScale;
-    const p_plain = trend.p_values ? trend.p_values[latIdx][lonIdx] / 10000.0 : 0.05;
-    const q_fdr = trend.q_values ? trend.q_values[latIdx][lonIdx] / 10000.0 : 0.05;
-    const isSigFdr = trend.significant_fdr[latIdx][lonIdx] === 1;
+    const analysis = extractAnalysisSeries(
+      fullMonthlySeries,
+      state.startYear,
+      state.endYear,
+      state.seasonFilter,
+      state.customMonths
+    );
 
-    const clientStats = computeClientStats(series);
-    const p_hr = clientStats.p_hr !== null ? clientStats.p_hr : p_plain;
-    const ci_lower = clientStats.ci_lower;
-    const ci_upper = clientStats.ci_upper;
+    let officialSlopeDecade = 0;
+    let p_hr = 1.0;
+    let p_plain = 1.0;
+    let q_fdr = 0.05;
+    let isSig = false;
+    let isTrending = false;
+    let ci_lower = 0;
+    let ci_upper = 0;
+    let mean = 0;
+    let std = 1.0;
+
+    if (isPrecomputedCell) {
+      const slopeScale = trend.slope_scale || 1.0;
+      const rawSlope = trend.slopes[latIdx][lonIdx];
+      officialSlopeDecade = rawSlope * slopeScale;
+      p_plain = trend.p_values ? trend.p_values[latIdx][lonIdx] / 10000.0 : 0.05;
+      q_fdr = trend.q_values ? trend.q_values[latIdx][lonIdx] / 10000.0 : 0.05;
+      isSig = trend.significant_fdr[latIdx][lonIdx] === 1;
+
+      const stats = computeFullStats(analysis.values, analysis.timePoints, analysis.slopeMultiplier);
+      p_hr = stats.p_hr !== null ? stats.p_hr : p_plain;
+      ci_lower = stats.ci_lower;
+      ci_upper = stats.ci_upper;
+      mean = stats.mean;
+      std = stats.std;
+      isTrending = !isSig && (p_hr < 0.1 || p_plain < 0.05);
+    } else {
+      const stats = computeFullStats(analysis.values, analysis.timePoints, analysis.slopeMultiplier);
+      officialSlopeDecade = stats.slopeDecade;
+      p_hr = stats.p_hr;
+      p_plain = stats.p_plain;
+      q_fdr = p_hr;
+      isSig = stats.isSig;
+      isTrending = stats.isTrending;
+      ci_lower = stats.ci_lower;
+      ci_upper = stats.ci_upper;
+      mean = stats.mean;
+      std = stats.std;
+    }
 
     const rateEl = document.getElementById('val-rate');
     const unitEl = document.getElementById('val-unit');
@@ -1438,15 +2256,20 @@
     unitEl.textContent = meta.trend_units || 'units/dec';
     animateNumber(phrEl, p_hr, 4);
     animateNumber(pplainEl, p_plain, 4);
-    fdrBadge.textContent = `FDR q = ${q_fdr.toFixed(4)}`;
+    if (fdrBadge) {
+      fdrBadge.textContent = isPrecomputedCell ? `FDR q = ${q_fdr.toFixed(4)}` : `p(HR) = ${p_hr.toFixed(4)}`;
+    }
 
     const verdictCard = document.getElementById('verdict-card');
     const statusText = document.getElementById('verdict-status-text');
 
-    if (isSigFdr) {
+    if (numYears < 5) {
+      verdictCard.className = 'verdict-card state-neutral';
+      statusText.textContent = 'RECORD TOO SHORT (< 5 YRS)';
+    } else if (isSig) {
       verdictCard.className = 'verdict-card state-significant';
-      statusText.textContent = 'SIGNIFICANT TREND (q < 0.05)';
-    } else if (p_hr < 0.1 || p_plain < 0.05) {
+      statusText.textContent = isPrecomputedCell ? 'SIGNIFICANT TREND (q < 0.05)' : 'SIGNIFICANT TREND (p < 0.05)';
+    } else if (isTrending) {
       verdictCard.className = 'verdict-card state-trending';
       statusText.textContent = 'TRENDING (NOT YET SIGNIFICANT)';
     } else {
@@ -1454,7 +2277,6 @@
       statusText.textContent = 'NO CLEAR TREND';
     }
 
-    // Update Confidence Interval Range Bar with smooth tweening
     const ciText = document.getElementById('ci-bounds-text');
     const ciSpan = document.getElementById('ci-range-span');
     const ciPoint = document.getElementById('ci-point-marker');
@@ -1469,11 +2291,10 @@
     gsap.to(ciSpan, { left: `${leftPct}%`, width: `${Math.max(2, rightPct - leftPct)}%`, duration: 0.5, ease: 'power2.out' });
     gsap.to(ciPoint, { left: `${pointPct}%`, duration: 0.5, ease: 'power2.out' });
 
-    // Caution Alert Callout
     const cautionBox = document.getElementById('verdict-caution-box');
     const cautionText = document.getElementById('verdict-caution-text');
     const eb = meta.era_break_2014_check || {};
-    const hasCaution = eb.caution === true || (eb.amazon_both_eras_sig_flip && regionName.includes('Amazon'));
+    const hasCaution = isPrecomputedCell && (eb.caution === true || (eb.amazon_both_eras_sig_flip && locationDisplayName.includes('Amazon')));
 
     if (hasCaution && cautionBox && cautionText) {
       cautionText.textContent =
@@ -1484,20 +2305,40 @@
       cautionBox.classList.add('hidden');
     }
 
+    const rollingMean = [];
+    if (!analysis.isAnnual) {
+      for (let i = 0; i < analysis.values.length; i++) {
+        if (i < 5 || i >= analysis.values.length - 6) {
+          rollingMean.push(null);
+        } else {
+          let sum = 0, count = 0;
+          for (let k = i - 5; k <= i + 6; k++) {
+            if (analysis.values[k] != null) {
+              sum += analysis.values[k];
+              count++;
+            }
+          }
+          rollingMean.push(count >= 10 ? sum / count : null);
+        }
+      }
+    }
+
     state.inspectorData = {
       latIdx,
       lonIdx,
-      series,
-      dates,
+      series: fullMonthlySeries,
+      dates: analysis.dates,
+      analysisValues: analysis.values,
       rollingMean,
-      mean: clientStats ? clientStats.mean : 0,
-      std: clientStats ? clientStats.std : 1.0,
+      mean,
+      std,
       unit: meta.trend_units || meta.units || 'units/mo',
       isMasked: false,
+      isAnnual: analysis.isAnnual,
     };
 
-    updateTimeSeriesChart(dates, series, rollingMean, officialSlopeDecade);
-    updateDetectabilityChart(series);
+    updateTimeSeriesChart(analysis.dates, analysis.values, rollingMean, officialSlopeDecade, analysis.isAnnual);
+    updateDetectabilityChart(fullMonthlySeries);
     updateInspectorMonthlyTelemetry(state.currentMonthIdx);
     updatePlanetaryLineup(latIdx, lonIdx, state.currentMonthIdx);
   }
@@ -1800,6 +2641,16 @@
     tourCard.classList.remove('hidden');
     gsap.fromTo(tourCard, { opacity: 0, y: 15 }, { opacity: 1, y: 0, duration: 0.4, ease: 'power2.out' });
 
+    if (step.season) {
+      handleSeasonPreset(step.season);
+    } else {
+      handleSeasonPreset('ALL');
+    }
+
+    if (state.selectionMode !== 'point') {
+      setSelectionMode('point');
+    }
+
     await switchVariable(step.varId);
     const snap = snapCoordsToGrid(step.lat, step.lon);
     state.cellIndex = snap;
@@ -1817,6 +2668,200 @@
         essential: true,
       });
     }
+  }
+
+  // --- Manual Bounding Box, Period Range & Seasonal Filters ---
+  function applyManualBbox() {
+    const inpS = document.getElementById('bbox-s');
+    const inpN = document.getElementById('bbox-n');
+    const inpW = document.getElementById('bbox-w');
+    const inpE = document.getElementById('bbox-e');
+
+    const sVal = parseFloat(inpS ? inpS.value : '-15');
+    const nVal = parseFloat(inpN ? inpN.value : '5');
+    const wVal = parseFloat(inpW ? inpW.value : '-75');
+    const eVal = parseFloat(inpE ? inpE.value : '-45');
+
+    const s = Math.max(-60, Math.min(60, isNaN(sVal) ? -15 : sVal));
+    const n = Math.max(-60, Math.min(60, isNaN(nVal) ? 5 : nVal));
+    const w = Math.max(-180, Math.min(180, isNaN(wVal) ? -75 : wVal));
+    const e = Math.max(-180, Math.min(180, isNaN(eVal) ? -45 : eVal));
+
+    state.regionBbox = {
+      s: Math.min(s, n),
+      n: Math.max(s, n),
+      w: Math.min(w, e),
+      e: Math.max(w, e),
+    };
+
+    syncBboxInputs();
+    updateRegionGeoJson();
+    recordAnalysisChoice();
+    updateInspector();
+  }
+
+  function handlePeriodPreset(periodKey) {
+    let start = 2000, end = 2025;
+    if (periodKey === '2000-2013') { start = 2000; end = 2013; }
+    else if (periodKey === '2014-2025') { start = 2014; end = 2025; }
+    else if (periodKey === '2015-2025') { start = 2015; end = 2025; }
+    else { start = 2000; end = 2025; }
+
+    setPeriodRange(start, end, periodKey);
+  }
+
+  function setPeriodRange(start, end, activePresetKey = null) {
+    state.startYear = Math.min(start, end);
+    state.endYear = Math.max(start, end);
+
+    const sStart = document.getElementById('slider-period-start');
+    const sEnd = document.getElementById('slider-period-end');
+    const iStart = document.getElementById('input-period-start');
+    const iEnd = document.getElementById('input-period-end');
+
+    if (sStart) sStart.value = state.startYear;
+    if (sEnd) sEnd.value = state.endYear;
+    if (iStart) iStart.value = state.startYear;
+    if (iEnd) iEnd.value = state.endYear;
+
+    document.querySelectorAll('.period-chips .chip-btn').forEach((btn) => {
+      if (activePresetKey) {
+        btn.classList.toggle('active', btn.dataset.period === activePresetKey);
+      } else {
+        const isMatch = btn.dataset.period === `${state.startYear}-${state.endYear}`;
+        btn.classList.toggle('active', isMatch);
+      }
+    });
+
+    recordAnalysisChoice();
+    updateInspector();
+  }
+
+  function handleSeasonPreset(seasonKey) {
+    state.seasonFilter = seasonKey;
+
+    document.querySelectorAll('.season-chips .chip-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.season === seasonKey);
+    });
+
+    const customBar = document.getElementById('custom-months-bar');
+    if (customBar) {
+      customBar.classList.toggle('hidden', seasonKey !== 'CUSTOM');
+    }
+
+    recordAnalysisChoice();
+    updateInspector();
+  }
+
+  function toggleCustomMonth(monthNum) {
+    if (!state.customMonths) state.customMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    const idx = state.customMonths.indexOf(monthNum);
+    if (idx >= 0) {
+      if (state.customMonths.length > 1) {
+        state.customMonths.splice(idx, 1);
+      }
+    } else {
+      state.customMonths.push(monthNum);
+      state.customMonths.sort((a, b) => a - b);
+    }
+
+    document.querySelectorAll('.custom-months-bar .month-btn').forEach((btn) => {
+      const m = Number(btn.dataset.month);
+      btn.classList.toggle('active', state.customMonths.includes(m));
+    });
+
+    if (state.seasonFilter !== 'CUSTOM') {
+      handleSeasonPreset('CUSTOM');
+    } else {
+      recordAnalysisChoice();
+      updateInspector();
+    }
+  }
+
+  function handleShareLink() {
+    const hash = getShareableHash();
+    history.replaceState(null, '', hash);
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(window.location.href).then(() => {
+        showToast('Shareable URL copied to clipboard!');
+      }).catch(() => {
+        showToast(`Shareable URL: ${window.location.href}`);
+      });
+    } else {
+      showToast(`Shareable URL: ${window.location.href}`);
+    }
+  }
+
+  function getShareableHash() {
+    const p = new URLSearchParams();
+    p.set('v', state.currentVarId);
+    p.set('mode', state.selectionMode);
+    if (state.selectionMode === 'point') {
+      p.set('lat', state.currentPin.lat.toFixed(2));
+      p.set('lon', state.currentPin.lon.toFixed(2));
+    } else {
+      p.set('bbox', `${state.regionBbox.s.toFixed(1)},${state.regionBbox.n.toFixed(1)},${state.regionBbox.w.toFixed(1)},${state.regionBbox.e.toFixed(1)}`);
+    }
+    p.set('start', state.startYear);
+    p.set('end', state.endYear);
+    p.set('season', state.seasonFilter);
+    if (state.seasonFilter === 'CUSTOM') {
+      p.set('months', state.customMonths.join(','));
+    }
+    return '#' + p.toString();
+  }
+
+  function parseAndApplyHash(hash) {
+    if (!hash || !hash.includes('=')) return false;
+    const raw = hash.replace(/^#/, '');
+    const p = new URLSearchParams(raw);
+
+    const v = p.get('v');
+    if (v && VARIABLES_LIST.some((item) => item.id === v)) {
+      state.currentVarId = v;
+    }
+
+    const mode = p.get('mode');
+    if (mode === 'point' || mode === 'region') {
+      state.selectionMode = mode;
+    }
+
+    if (state.selectionMode === 'point') {
+      const lat = parseFloat(p.get('lat'));
+      const lon = parseFloat(p.get('lon'));
+      if (!isNaN(lat) && !isNaN(lon)) {
+        const snap = snapCoordsToGrid(lat, lon);
+        state.cellIndex = snap;
+        state.currentPin = { lat: snap.snappedLat, lon: snap.snappedLon };
+      }
+    } else {
+      const bboxStr = p.get('bbox');
+      if (bboxStr) {
+        const parts = bboxStr.split(',').map(Number);
+        if (parts.length === 4 && parts.every((n) => !isNaN(n))) {
+          state.regionBbox = { s: parts[0], n: parts[1], w: parts[2], e: parts[3] };
+        }
+      }
+    }
+
+    const start = parseInt(p.get('start'), 10);
+    const end = parseInt(p.get('end'), 10);
+    if (!isNaN(start) && start >= 2000 && start <= 2025) state.startYear = start;
+    if (!isNaN(end) && end >= 2000 && end <= 2025) state.endYear = end;
+
+    const season = p.get('season');
+    if (['ALL', 'DJF', 'MAM', 'JJA', 'SON', 'CUSTOM'].includes(season)) {
+      state.seasonFilter = season;
+    }
+
+    const monthsStr = p.get('months');
+    if (monthsStr) {
+      const m = monthsStr.split(',').map(Number).filter((n) => n >= 1 && n <= 12);
+      if (m.length > 0) state.customMonths = m;
+    }
+
+    return true;
   }
 
   // --- Build Variable Selection Menu ---
@@ -1848,13 +2893,10 @@
       btnStart.addEventListener('click', () => {
         state.isSpinningIntro = false;
         const intro = document.getElementById('intro-overlay');
-        gsap.to(intro, {
-          opacity: 0,
-          scale: 1.05,
-          duration: 0.6,
-          ease: 'power2.inOut',
-          onComplete: () => intro.classList.add('hidden'),
-        });
+        if (intro) {
+          intro.style.pointerEvents = 'none';
+          intro.classList.add('hidden');
+        }
         launchTourStep(0);
       });
     }
@@ -1863,7 +2905,11 @@
     if (btnIntroTour) {
       btnIntroTour.addEventListener('click', () => {
         state.isSpinningIntro = false;
-        document.getElementById('intro-overlay').classList.add('hidden');
+        const intro = document.getElementById('intro-overlay');
+        if (intro) {
+          intro.style.pointerEvents = 'none';
+          intro.classList.add('hidden');
+        }
         launchTourStep(0);
       });
     }
@@ -1949,6 +2995,10 @@
 
       // Pointer down tracking to differentiate pan/tilt/rotation/pinch gestures from stationary single tap
       state.map.on('mousedown', (e) => {
+        if (state.isDrawingRegion) {
+          state.drawStartLngLat = e.lngLat;
+          return;
+        }
         pointerDownTime = performance.now();
         pointerDownPos = { x: e.point.x, y: e.point.y };
         maxPointerDist = 0;
@@ -1957,6 +3007,14 @@
       });
 
       state.map.on('touchstart', (e) => {
+        if (state.isDrawingRegion) {
+          if (e.touches && e.touches.length === 1) {
+            const rect = document.getElementById('map-container').getBoundingClientRect();
+            const unproj = state.map.unproject([e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top]);
+            state.drawStartLngLat = unproj;
+          }
+          return;
+        }
         pointerDownTime = performance.now();
         maxTouchesInGesture = Math.max(maxTouchesInGesture, e.touches ? e.touches.length : 1);
         maxPointerDist = 0;
@@ -1971,6 +3029,20 @@
       });
 
       state.map.on('mousemove', (e) => {
+        if (state.isDrawingRegion && state.drawStartLngLat) {
+          const curLat = Math.max(-60, Math.min(60, e.lngLat.lat));
+          const curLng = Math.max(-180, Math.min(180, e.lngLat.lng));
+          state.regionBbox = {
+            s: Math.min(state.drawStartLngLat.lat, curLat),
+            n: Math.max(state.drawStartLngLat.lat, curLat),
+            w: Math.min(state.drawStartLngLat.lng, curLng),
+            e: Math.max(state.drawStartLngLat.lng, curLng),
+          };
+          updateRegionGeoJson();
+          syncBboxInputs();
+          return;
+        }
+
         if (pointerDownPos && e.originalEvent && e.originalEvent.buttons > 0) {
           const dist = Math.hypot(e.point.x - pointerDownPos.x, e.point.y - pointerDownPos.y);
           if (dist > maxPointerDist) maxPointerDist = dist;
@@ -2011,7 +3083,40 @@
         }
       });
 
+      state.map.on('mouseup', (e) => {
+        if (state.isDrawingRegion && state.drawStartLngLat) {
+          const curLat = Math.max(-60, Math.min(60, e.lngLat.lat));
+          const curLng = Math.max(-180, Math.min(180, e.lngLat.lng));
+          state.regionBbox = {
+            s: Math.min(state.drawStartLngLat.lat, curLat),
+            n: Math.max(state.drawStartLngLat.lat, curLat),
+            w: Math.min(state.drawStartLngLat.lng, curLng),
+            e: Math.max(state.drawStartLngLat.lng, curLng),
+          };
+          toggleDrawRegion(false);
+          syncBboxInputs();
+          recordAnalysisChoice();
+          updateInspector();
+        }
+      });
+
       state.map.on('touchmove', (e) => {
+        if (state.isDrawingRegion && state.drawStartLngLat && e.touches && e.touches.length === 1) {
+          const rect = document.getElementById('map-container').getBoundingClientRect();
+          const unproj = state.map.unproject([e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top]);
+          const curLat = Math.max(-60, Math.min(60, unproj.lat));
+          const curLng = Math.max(-180, Math.min(180, unproj.lng));
+          state.regionBbox = {
+            s: Math.min(state.drawStartLngLat.lat, curLat),
+            n: Math.max(state.drawStartLngLat.lat, curLat),
+            w: Math.min(state.drawStartLngLat.lng, curLng),
+            e: Math.max(state.drawStartLngLat.lng, curLng),
+          };
+          updateRegionGeoJson();
+          syncBboxInputs();
+          return;
+        }
+
         if (e.touches && e.touches.length > 1) {
           maxTouchesInGesture = Math.max(maxTouchesInGesture, e.touches.length);
           isGestureActive = true;
@@ -2039,6 +3144,10 @@
 
       // Strict stationary single-tap pin placement (< 6px movement, < 400ms duration, no multi-touch/gesture)
       state.map.on('click', (e) => {
+        if (state.isDrawingRegion || state.selectionMode === 'region') {
+          return;
+        }
+
         const now = performance.now();
         const duration = now - pointerDownTime;
         const timeSinceGesture = now - lastGestureEndTime;
@@ -2051,7 +3160,6 @@
           duration >= 400 ||
           timeSinceGesture < 250
         ) {
-          // Suppress pin placement during/after pan, pinch, twist or tilt
           isGestureActive = false;
           maxTouchesInGesture = 0;
           maxPointerDist = 0;
@@ -2064,6 +3172,7 @@
         dropPinMarker(snap.snappedLat, snap.snappedLon);
         const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         state.map.easeTo({ center: [snap.snappedLon, snap.snappedLat], duration: prefersReduced ? 0 : 600 });
+        recordAnalysisChoice();
         updateInspector(snap.latIdx, snap.lonIdx);
 
         // Reset tracking
@@ -2071,6 +3180,121 @@
         maxPointerDist = 0;
         isGestureActive = false;
       });
+    }
+
+    // Selection Mode Toggle Buttons
+    const btnModePoint = document.getElementById('btn-mode-point');
+    const btnModeRegion = document.getElementById('btn-mode-region');
+    if (btnModePoint) {
+      btnModePoint.addEventListener('click', () => setSelectionMode('point'));
+    }
+    if (btnModeRegion) {
+      btnModeRegion.addEventListener('click', () => setSelectionMode('region'));
+    }
+
+    // Draw Region Buttons
+    const btnDrawRegion = document.getElementById('btn-draw-region');
+    const btnExitDraw = document.getElementById('btn-exit-draw');
+    if (btnDrawRegion) {
+      btnDrawRegion.addEventListener('click', () => toggleDrawRegion());
+    }
+    if (btnExitDraw) {
+      btnExitDraw.addEventListener('click', () => toggleDrawRegion(false));
+    }
+
+    // Presets Dropdown
+    const btnRegionPresets = document.getElementById('btn-region-presets');
+    const presetsMenu = document.getElementById('presets-menu');
+    if (btnRegionPresets && presetsMenu) {
+      btnRegionPresets.addEventListener('click', (e) => {
+        e.stopPropagation();
+        presetsMenu.classList.toggle('hidden');
+      });
+      window.addEventListener('click', () => presetsMenu.classList.add('hidden'));
+    }
+
+    document.querySelectorAll('.preset-item').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (presetsMenu) presetsMenu.classList.add('hidden');
+        applyPreset(btn.dataset.preset);
+      });
+    });
+
+    // Manual Bbox Controls
+    const btnApplyBbox = document.getElementById('btn-apply-bbox');
+    if (btnApplyBbox) {
+      btnApplyBbox.addEventListener('click', applyManualBbox);
+    }
+    ['bbox-s', 'bbox-n', 'bbox-w', 'bbox-e'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') applyManualBbox();
+        });
+      }
+    });
+
+    // Analysis Counter Reset Link
+    const btnResetCounter = document.getElementById('btn-reset-counter');
+    if (btnResetCounter) {
+      btnResetCounter.addEventListener('click', (e) => {
+        e.preventDefault();
+        state.analysisChoicesCount = 0;
+        document.getElementById('analysis-counter-card')?.classList.add('hidden');
+      });
+    }
+
+    // Period Selection Controls
+    document.querySelectorAll('.period-chips .chip-btn').forEach((btn) => {
+      btn.addEventListener('click', () => handlePeriodPreset(btn.dataset.period));
+    });
+
+    const sStart = document.getElementById('slider-period-start');
+    const sEnd = document.getElementById('slider-period-end');
+    const iStart = document.getElementById('input-period-start');
+    const iEnd = document.getElementById('input-period-end');
+
+    if (sStart && sEnd) {
+      sStart.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        if (val > state.endYear) sStart.value = state.endYear;
+        setPeriodRange(parseInt(sStart.value, 10), state.endYear);
+      });
+      sEnd.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        if (val < state.startYear) sEnd.value = state.startYear;
+        setPeriodRange(state.startYear, parseInt(sEnd.value, 10));
+      });
+    }
+
+    if (iStart && iEnd) {
+      iStart.addEventListener('change', (e) => {
+        const val = parseInt(e.target.value, 10);
+        if (!isNaN(val) && val >= 2000 && val <= 2025) {
+          setPeriodRange(val, Math.max(val, state.endYear));
+        }
+      });
+      iEnd.addEventListener('change', (e) => {
+        const val = parseInt(e.target.value, 10);
+        if (!isNaN(val) && val >= 2000 && val <= 2025) {
+          setPeriodRange(Math.min(val, state.startYear), val);
+        }
+      });
+    }
+
+    // Seasonal Filter Controls
+    document.querySelectorAll('.season-chips .chip-btn').forEach((btn) => {
+      btn.addEventListener('click', () => handleSeasonPreset(btn.dataset.season));
+    });
+
+    document.querySelectorAll('.custom-months-bar .month-btn').forEach((btn) => {
+      btn.addEventListener('click', () => toggleCustomMonth(Number(btn.dataset.month)));
+    });
+
+    // Share Link Button
+    const btnShareLink = document.getElementById('btn-share-link');
+    if (btnShareLink) {
+      btnShareLink.addEventListener('click', handleShareLink);
     }
 
     const toggleTwins = document.getElementById('toggle-opposite-twins');
@@ -2199,8 +3423,14 @@
         launchTourStep(1);
       } else if (e.key === '3') {
         launchTourStep(2);
+      } else if (e.key === '4') {
+        launchTourStep(3);
       } else if (e.key.toLowerCase() === 't') {
         launchTourStep(0);
+      } else if (e.key.toLowerCase() === 'd') {
+        toggleDrawRegion();
+      } else if (e.key.toLowerCase() === 'r') {
+        setSelectionMode(state.selectionMode === 'point' ? 'region' : 'point');
       } else if (e.key.toLowerCase() === 'o') {
         const toggle = document.getElementById('toggle-opposite-twins');
         if (toggle) {
@@ -2219,10 +3449,12 @@
       } else if (e.key.toLowerCase() === 'p') {
         toggleTilt();
       } else if (e.key === 'Escape') {
-        document.getElementById('modal-shortcuts').classList.add('hidden');
-        document.getElementById('tour-card').classList.add('hidden');
+        if (state.isDrawingRegion) toggleDrawRegion(false);
+        document.getElementById('modal-shortcuts')?.classList.add('hidden');
+        document.getElementById('tour-card')?.classList.add('hidden');
+        document.getElementById('presets-menu')?.classList.add('hidden');
       } else if (e.key === '?') {
-        document.getElementById('modal-shortcuts').classList.remove('hidden');
+        document.getElementById('modal-shortcuts')?.classList.remove('hidden');
       }
     });
   }
@@ -2239,38 +3471,46 @@
     setProjection(state.projection, false);
 
     const hash = window.location.hash;
+    const hasAppliedCustomHash = parseAndApplyHash(hash);
+
     if (hash === '#demo-sahel') {
       state.isSpinningIntro = false;
-      document.getElementById('intro-overlay').classList.add('hidden');
+      document.getElementById('intro-overlay')?.classList.add('hidden');
       await launchTourStep(1);
     } else if (hash === '#demo-tibet') {
       state.isSpinningIntro = false;
-      document.getElementById('intro-overlay').classList.add('hidden');
+      document.getElementById('intro-overlay')?.classList.add('hidden');
       await launchTourStep(2);
     } else if (hash === '#demo-amazon') {
       state.isSpinningIntro = false;
-      document.getElementById('intro-overlay').classList.add('hidden');
+      document.getElementById('intro-overlay')?.classList.add('hidden');
       await launchTourStep(0);
+    } else if (hash === '#demo-canada') {
+      state.isSpinningIntro = false;
+      document.getElementById('intro-overlay')?.classList.add('hidden');
+      await launchTourStep(3);
     } else {
       await loadVariable(state.currentVarId);
       const varData = state.cache[state.currentVarId];
       updateGridLayer(varData);
-      dropPinMarker(state.currentPin.lat, state.currentPin.lon);
-      updateInspector(state.cellIndex.latIdx, state.cellIndex.lonIdx);
-    }
 
-    // Preload remaining variables in background for instant monthly lineup & switching
-    setTimeout(() => {
-      VARIABLES_LIST.forEach((v) => {
-        if (v.id !== state.currentVarId) {
-          loadVariable(v.id).then(() => {
-            if (state.lineupMode === 'monthly' || state.viewMode === 'monthly') {
-              updatePlanetaryLineup(state.cellIndex.latIdx, state.cellIndex.lonIdx, state.currentMonthIdx);
-            }
-          }).catch(() => {});
+      if (hasAppliedCustomHash) {
+        state.isSpinningIntro = false;
+        document.getElementById('intro-overlay')?.classList.add('hidden');
+        setSelectionMode(state.selectionMode);
+        setPeriodRange(state.startYear, state.endYear);
+        handleSeasonPreset(state.seasonFilter);
+        if (state.selectionMode === 'point') {
+          dropPinMarker(state.currentPin.lat, state.currentPin.lon);
+        } else {
+          updateRegionGeoJson();
         }
-      });
-    }, 600);
+        updateInspector();
+      } else {
+        dropPinMarker(state.currentPin.lat, state.currentPin.lon);
+        updateInspector(state.cellIndex.latIdx, state.cellIndex.lonIdx);
+      }
+    }
   }
 
   // Expose for testing & telemetry inspection
@@ -2282,6 +3522,15 @@
     dropPinMarker,
     switchVariable,
     launchTourStep,
+    setSelectionMode,
+    applyPreset,
+    toggleDrawRegion,
+    setPeriodRange,
+    handleSeasonPreset,
+    computeRegionalTimeSeries,
+    computeFullStats,
+    getShareableHash,
+    parseAndApplyHash,
   };
 
   window.addEventListener('DOMContentLoaded', init);

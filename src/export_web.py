@@ -77,6 +77,50 @@ def get_caution_note_for_variable(var_id: str, is_caution: bool, pct_sig_break: 
             "which introduces potential observing-system shifts across the 25-year record. "
             + base_disclaimer
         )
+    elif var_id == "gldas_swe":
+        return (
+            "Simulated snow water equivalent (SWE) with Noah Model 2.1 in Land Information System. "
+            "Cells with < 50% non-zero snow months are masked out to focus on the regular seasonal and perennial cryosphere. "
+            f"Trend-aware step test across 2014 is {'significant' if p_step < 0.01 else 'not significant'} (p = {p_step:.2e}). "
+            + base_disclaimer
+        )
+    elif var_id == "gldas_snow_depth":
+        return (
+            "Simulated physical snowpack depth (meters) with Noah Model 2.1 in Land Information System. "
+            "Cells with < 50% non-zero snow months are masked out to focus on regions with seasonal snow accumulation. "
+            f"Trend-aware step test across 2014 is {'significant' if p_step < 0.01 else 'not significant'} (p = {p_step:.2e}). "
+            + base_disclaimer
+        )
+    elif var_id == "merra2_ts":
+        return (
+            "Surface skin temperature over land and prescribed sea surface temperature (SST) over oceans. "
+            "Over oceans, surface temperature is not an independent atmospheric reanalysis measurement, but is prescribed "
+            "from external operational SST products (e.g., Reynolds 1/4° SST and OSTIA) used as boundary conditions. "
+            "Polar domains poleward of 60° are masked to avoid sea-ice observing discontinuities. "
+            f"Trend-aware step test across 2014 is {'significant' if p_step < 0.01 else 'not significant'} (p = {p_step:.2e}). "
+            + base_disclaimer
+        )
+    elif var_id == "merra2_wind":
+        return (
+            "10-meter surface wind speed magnitude computed as sqrt(U10M^2 + V10M^2) from MERRA-2 M2TMNXSLV v5.12.4. "
+            "Assimilates spaceborne scatterometers, ship observations, and coastal anemometers. "
+            f"Trend-aware step test across 2014 is {'significant' if p_step < 0.01 else 'not significant'} (p = {p_step:.2e}). "
+            + base_disclaimer
+        )
+    elif var_id == "merra2_ps":
+        return (
+            "Surface atmospheric pressure (hPa) from MERRA-2 M2TMNXSLV v5.12.4. "
+            "Tightly linked to surface elevation and large-scale atmospheric mass redistributions (teleconnections like ENSO and NAO). "
+            f"Trend-aware step test across 2014 is {'significant' if p_step < 0.01 else 'not significant'} (p = {p_step:.2e}). "
+            + base_disclaimer
+        )
+    elif var_id == "merra2_tqv":
+        return (
+            "Total precipitable column water vapor (kg/m^2) from MERRA-2 M2TMNXSLV v5.12.4. "
+            "Assimilates satellite microwave sounders and infrared radiances; tracks Clausius-Clapeyron atmospheric moisture capacity. "
+            f"Trend-aware step test across 2014 is {'significant' if p_step < 0.01 else 'not significant'} (p = {p_step:.2e}). "
+            + base_disclaimer
+        )
     return base_disclaimer
 
 
@@ -215,12 +259,15 @@ def export_variable_to_web(var_id: str) -> Dict[str, Any]:
 
     # Regional flip check (Amazon and Sahel)
     from cross_check import AMAZON_BBOX, SAHEL_BBOX, run_regional_era_stats
-    amz_stats = run_regional_era_stats(ds_anom[da_name], AMAZON_BBOX)
-    shl_stats = run_regional_era_stats(ds_anom[da_name], SAHEL_BBOX)
-
-    amz_both_sig_flip = bool(amz_stats['p_t1'] < 0.05 and amz_stats['p_t2'] < 0.05 and np.sign(amz_stats['slope_t1']) != np.sign(amz_stats['slope_t2']))
-    shl_both_sig_flip = bool(shl_stats['p_t1'] < 0.05 and shl_stats['p_t2'] < 0.05 and np.sign(shl_stats['slope_t1']) != np.sign(shl_stats['slope_t2']))
-    regional_sig_flip = amz_both_sig_flip or shl_both_sig_flip
+    regional_sig_flip = False
+    try:
+        amz_stats = run_regional_era_stats(ds_anom[da_name], AMAZON_BBOX)
+        shl_stats = run_regional_era_stats(ds_anom[da_name], SAHEL_BBOX)
+        amz_both_sig_flip = bool(amz_stats['p_t1'] < 0.05 and amz_stats['p_t2'] < 0.05 and np.sign(amz_stats['slope_t1']) != np.sign(amz_stats['slope_t2']))
+        shl_both_sig_flip = bool(shl_stats['p_t1'] < 0.05 and shl_stats['p_t2'] < 0.05 and np.sign(shl_stats['slope_t1']) != np.sign(shl_stats['slope_t2']))
+        regional_sig_flip = amz_both_sig_flip or shl_both_sig_flip
+    except Exception:
+        regional_sig_flip = False
 
     is_caution = bool((p_step_detrend < 0.01) or regional_sig_flip)
 
@@ -239,6 +286,10 @@ def export_variable_to_web(var_id: str) -> Dict[str, Any]:
         "dataset_short_name": var_cfg.dataset_short_name,
         "version": var_cfg.version,
         "source_variable": source_var_name,
+        "ocean_forcing_note": (
+            "Over oceans, surface temperature is prescribed from external SST products "
+            "(e.g. Reynolds SST / OSTIA) used to force the reanalysis, not an independent atmospheric measurement."
+        ) if var_id == "merra2_ts" else None,
         "time_range": {
             "start": str(ds_anom["time"].values[0])[:10],
             "end": str(ds_anom["time"].values[-1])[:10],

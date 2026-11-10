@@ -112,6 +112,120 @@ merra2_aod:
   is_flux_rate: false
   scale_factor: 1.0
   add_offset: 0.0
+gldas_swe:
+  id: gldas_swe
+  name: Snow Water Equivalent (GLDAS)
+  student_definition: The liquid water depth that would result from immediately melting
+    the accumulated snowpack.
+  units: kg/m^2
+  dataset_short_name: GLDAS_NOAH025_M
+  version: '2.1'
+  source_variable: SWE_inst
+  source_group: null
+  file_format: nc4
+  time_range: !!python/tuple
+  - '2000-06-01'
+  - '2025-09-01'
+  aggregation: monthly_mean
+  native_resolution: 0.25 degree (600 x 1440)
+  is_flux_rate: false
+  scale_factor: 1.0
+  add_offset: 0.0
+gldas_snow_depth:
+  id: gldas_snow_depth
+  name: Snow Depth (GLDAS)
+  student_definition: The physical vertical thickness of snow accumulation covering
+    the ground surface.
+  units: m
+  dataset_short_name: GLDAS_NOAH025_M
+  version: '2.1'
+  source_variable: SnowDepth_inst
+  source_group: null
+  file_format: nc4
+  time_range: !!python/tuple
+  - '2000-06-01'
+  - '2025-09-01'
+  aggregation: monthly_mean
+  native_resolution: 0.25 degree (600 x 1440)
+  is_flux_rate: false
+  scale_factor: 1.0
+  add_offset: 0.0
+merra2_ts:
+  id: merra2_ts
+  name: Surface temperature (land skin + ocean surface, MERRA-2)
+  student_definition: Thermodynamic skin temperature over land and prescribed sea
+    surface temperature (SST) over ocean.
+  units: degC
+  dataset_short_name: M2TMNXSLV
+  version: 5.12.4
+  source_variable: TS
+  source_group: null
+  file_format: nc4
+  time_range: !!python/tuple
+  - '2000-06-01'
+  - '2025-09-01'
+  aggregation: kelvin_to_celsius
+  native_resolution: 0.5 x 0.625 degree (361 x 576)
+  is_flux_rate: false
+  scale_factor: 1.0
+  add_offset: -273.15
+merra2_wind:
+  id: merra2_wind
+  name: 10m Wind Speed (MERRA-2)
+  student_definition: The magnitude of surface wind velocity at 10 meters above surface
+    derived from eastward and northward vectors.
+  units: m/s
+  dataset_short_name: M2TMNXSLV
+  version: 5.12.4
+  source_variable: WIND10M
+  source_group: null
+  file_format: nc4
+  time_range: !!python/tuple
+  - '2000-06-01'
+  - '2025-09-01'
+  aggregation: monthly_mean
+  native_resolution: 0.5 x 0.625 degree (361 x 576)
+  is_flux_rate: false
+  scale_factor: 1.0
+  add_offset: 0.0
+merra2_ps:
+  id: merra2_ps
+  name: Surface Pressure (MERRA-2)
+  student_definition: Atmospheric pressure exerted by the weight of air directly at
+    the Earth's topography elevation.
+  units: hPa
+  dataset_short_name: M2TMNXSLV
+  version: 5.12.4
+  source_variable: PS
+  source_group: null
+  file_format: nc4
+  time_range: !!python/tuple
+  - '2000-06-01'
+  - '2025-09-01'
+  aggregation: pa_to_hpa
+  native_resolution: 0.5 x 0.625 degree (361 x 576)
+  is_flux_rate: false
+  scale_factor: 0.01
+  add_offset: 0.0
+merra2_tqv:
+  id: merra2_tqv
+  name: Total Column Water Vapor (MERRA-2)
+  student_definition: Total integrated mass of gaseous water vapor in an atmospheric
+    column extending from surface to space.
+  units: kg/m^2
+  dataset_short_name: M2TMNXSLV
+  version: 5.12.4
+  source_variable: TQV
+  source_group: null
+  file_format: nc4
+  time_range: !!python/tuple
+  - '2000-06-01'
+  - '2025-09-01'
+  aggregation: monthly_mean
+  native_resolution: 0.5 x 0.625 degree (361 x 576)
+  is_flux_rate: false
+  scale_factor: 1.0
+  add_offset: 0.0
 modis_ndvi:
   id: modis_ndvi
   name: Vegetation Greenness (NDVI)

@@ -45,8 +45,34 @@ def run_regional_era_stats(
     mask_t2 = times > pd.Timestamp(ERA_BREAK_DATE)
 
     s_full = sub.values[np.isfinite(sub.values)]
+    if len(s_full) < 10:
+        return {
+            "slope_full": 0.0,
+            "p_full": 1.0,
+            "slope_t1": 0.0,
+            "p_t1": 1.0,
+            "slope_t2": 0.0,
+            "p_t2": 1.0,
+            "step_difference_mm": 0.0,
+            "welch_t_p": 1.0,
+            "mann_whitney_p": 1.0,
+        }
     s_t1 = sub.values[mask_t1]
     s_t2 = sub.values[mask_t2]
+    s_t1 = s_t1[np.isfinite(s_t1)]
+    s_t2 = s_t2[np.isfinite(s_t2)]
+    if len(s_t1) < 5 or len(s_t2) < 5:
+        return {
+            "slope_full": 0.0,
+            "p_full": 1.0,
+            "slope_t1": 0.0,
+            "p_t1": 1.0,
+            "slope_t2": 0.0,
+            "p_t2": 1.0,
+            "step_difference_mm": 0.0,
+            "welch_t_p": 1.0,
+            "mann_whitney_p": 1.0,
+        }
 
     # Hamed-Rao trends
     r_full = mk.hamed_rao_modification_test(s_full)

@@ -75,7 +75,7 @@
       </div>
     </div>
 
-    <!-- Center Group: Projection Toggle + Case Tour Trigger -->
+    <!-- Center Group: Projection Toggle + Region Selector + Case Tour Trigger -->
     <div class="hud-header-center">
       <!-- Projection Toggle (Flat Map / Globe) -->
       <div class="projection-toggle" role="radiogroup" aria-label="Map Projection" id="proj-toggle-group">
@@ -98,6 +98,50 @@
         </button>
       </div>
 
+      <!-- Selection Mode Toggle: Point vs Region -->
+      <div class="selection-mode-toggle" role="radiogroup" aria-label="Selection Mode" id="selection-mode-group">
+        <div class="toggle-pill-slider" id="sel-pill-slider"></div>
+        <button class="sel-btn active" id="btn-mode-point" role="radio" aria-checked="true" aria-label="Single grid cell point" title="Single grid cell [P]">
+          <svg class="sel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span class="sel-label">Point</span>
+        </button>
+        <button class="sel-btn" id="btn-mode-region" role="radio" aria-checked="false" aria-label="Geographic Region" title="Geographic Region [R]">
+          <svg class="sel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="2 2"/></svg>
+          <span class="sel-label">Region</span>
+        </button>
+      </div>
+
+      <!-- Draw Region Button -->
+      <button class="hud-action-btn" id="btn-draw-region" title="Draw bounding box on map [D]" aria-label="Draw Region">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <span id="draw-btn-text">Draw</span>
+      </button>
+
+      <!-- Region Presets Dropdown Menu -->
+      <div class="presets-dropdown-wrap">
+        <button class="hud-action-btn" id="btn-region-presets" title="Preset Regions" aria-haspopup="true" aria-expanded="false">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+          <span>Presets</span>
+          <svg class="icon-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="presets-menu hidden" id="presets-menu" role="menu">
+          <div class="preset-group-title">ONE-CLICK EXTENTS</div>
+          <button class="preset-item" role="menuitem" data-preset="world">Whole World (60&deg;S to 60&deg;N)</button>
+          <button class="preset-item" role="menuitem" data-preset="visible">Whole Visible Map</button>
+          <div class="preset-group-title">KEY CLIMATE DOMAINS</div>
+          <button class="preset-item" role="menuitem" data-preset="amazon">Amazon Basin (South America)</button>
+          <button class="preset-item" role="menuitem" data-preset="sahel">African Sahel Corridor</button>
+          <button class="preset-item" role="menuitem" data-preset="canada">Central Canada Boreal (Wildfire)</button>
+          <button class="preset-item" role="menuitem" data-preset="great_plains">North American Great Plains</button>
+          <button class="preset-item" role="menuitem" data-preset="wisconsin">Wisconsin Area (Upper Midwest)</button>
+          <button class="preset-item" role="menuitem" data-preset="sahara">Sahara Desert</button>
+          <button class="preset-item" role="menuitem" data-preset="india">Indian Subcontinent</button>
+          <button class="preset-item" role="menuitem" data-preset="europe">Western &amp; Central Europe</button>
+          <button class="preset-item" role="menuitem" data-preset="pacific">Tropical Pacific (ENSO Zone)</button>
+          <button class="preset-item" role="menuitem" data-preset="arctic">Arctic Ocean (Above 60&deg;N &mdash; Masked)</button>
+        </div>
+      </div>
+
       <div class="case-tour-trigger" id="btn-start-tour" title="Launch guided detective tour">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
@@ -113,6 +157,11 @@
         <span class="telemetry-sep">|</span>
         <span class="telemetry-item"><span class="telemetry-label">GRID:</span> <strong class="telemetry-val">2.5&deg; (&times;10,368)</strong></span>
       </div>
+      <!-- Share Link Button -->
+      <button class="hud-action-btn btn-share" id="btn-share-link" title="Copy shareable URL link" aria-label="Share Link">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        <span>Share</span>
+      </button>
       <button class="hud-icon-btn" id="btn-shortcuts" title="Keyboard Shortcuts (?)">
         <span class="key-hint">?</span>
       </button>
@@ -179,15 +228,62 @@
     </div>
   </aside>
 
+  <!-- Floating Draw Mode Notice Bar -->
+  <div class="draw-mode-banner hidden" id="draw-mode-banner">
+    <div class="draw-banner-content">
+      <span class="draw-pulse-dot"></span>
+      <strong>DRAW MODE ACTIVE:</strong> Click and drag on map to define custom region box
+    </div>
+    <button class="btn-exit-draw" id="btn-exit-draw">Exit Draw Mode [ESC]</button>
+  </div>
+
   <!-- Right Floating Panel: Investigation Inspector -->
   <aside class="panel-floating panel-right" id="panel-right">
-    <!-- Pinned Coordinate Header -->
-    <div class="inspector-location-header">
+    <!-- Pinned Coordinate / Region Header -->
+    <div class="inspector-location-header" id="inspector-location-header">
       <div class="pin-badge">
-        <svg class="icon-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <svg class="icon-pin" id="inspector-mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
         <span class="pin-coords" id="inspector-coords">LAT: -3.75&deg;, LON: -61.25&deg;</span>
       </div>
       <div class="location-name" id="inspector-name">Amazon Basin, South America</div>
+    </div>
+
+    <!-- Region Metadata & Manual Input Card (Visible when in Region Mode) -->
+    <div class="region-info-card hidden" id="region-info-card">
+      <div class="region-meta-row">
+        <span class="region-cell-count" id="region-cell-count">46 VALID CELLS (OF 48)</span>
+        <span class="region-area-val font-mono" id="region-area-val">4,281,400 km&sup2;</span>
+      </div>
+      <!-- Warnings and Mask Notices -->
+      <div class="region-alert warning hidden" id="region-small-warn">
+        <span>⚠️ Small region (&lt; 4 cells). Resolution is 2.5&deg; (~280 km).</span>
+      </div>
+      <div class="region-alert error hidden" id="region-empty-warn">
+        <span>❌ Region contains 0 valid cells for this variable.</span>
+      </div>
+      <div class="region-alert info hidden" id="region-masked-info">
+        <span>ℹ️ Contains masked ocean/polar cells; excluded from average.</span>
+      </div>
+      <!-- Manual Accessible Bounding Box Inputs -->
+      <div class="manual-bbox-row">
+        <span class="bbox-tag">BOUNDS:</span>
+        <div class="bbox-inputs">
+          <input type="number" id="bbox-s" placeholder="S" class="bbox-input" title="South Latitude (-60 to 60)" step="2.5" min="-60" max="60">
+          <input type="number" id="bbox-n" placeholder="N" class="bbox-input" title="North Latitude (-60 to 60)" step="2.5" min="-60" max="60">
+          <input type="number" id="bbox-w" placeholder="W" class="bbox-input" title="West Longitude (-180 to 180)" step="2.5" min="-180" max="180">
+          <input type="number" id="bbox-e" placeholder="E" class="bbox-input" title="East Longitude (-180 to 180)" step="2.5" min="-180" max="180">
+          <button id="btn-apply-bbox" class="btn-bbox-apply" title="Apply manual bounding coordinates">SET</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Analysis-Choices Multiple-Testing Counter Notice -->
+    <div class="analysis-counter-card hidden" id="analysis-counter-card">
+      <div class="counter-header">
+        <span class="counter-icon">⚠️</span>
+        <span id="counter-notice-text">You have tested 5 combinations. With this many looks, a p below 0.05 will appear by chance about 1 time in 20. These p-values are not adjusted.</span>
+      </div>
+      <button class="counter-reset-link" id="btn-reset-counter" title="Reset combinations counter">reset counter</button>
     </div>
 
     <!-- Real-Time Monthly Observation Telemetry -->
@@ -235,6 +331,12 @@
 
     <!-- Dynamic Verdict Card -->
     <div class="verdict-card state-neutral" id="verdict-card">
+      <!-- Selection Context Line & Browser Computation Badge -->
+      <div class="verdict-selection-bar">
+        <span class="verdict-selection-text" id="verdict-selection-text">Point: -3.75&deg;, -61.25&deg; | 2000–2025 | All Year</span>
+        <span class="verdict-calc-badge" id="verdict-calc-badge">Precomputed Telemetry</span>
+      </div>
+
       <div class="verdict-header">
         <div class="verdict-status-pill" id="verdict-status-pill">
           <span class="status-indicator-dot"></span>
@@ -288,6 +390,75 @@
       <!-- Mandatory Scientific Honesty Disclaimer -->
       <div class="verdict-disclaimer">
         <em>Trend over 2000&ndash;2025; may reflect natural cycles like ENSO. Trend is not cause.</em>
+      </div>
+    </div>
+
+    <!-- Analysis Controls: Time Period & Seasonal Slicing -->
+    <div class="analysis-controls-card" id="analysis-controls-card">
+      <!-- Section 1: Time Period Selection -->
+      <div class="control-header-row">
+        <span class="control-header-title">TIME PERIOD SELECTION</span>
+        <span class="control-header-badge font-mono" id="period-badge">2000 &ndash; 2025 (25.3 YRS)</span>
+      </div>
+
+      <!-- Period Presets -->
+      <div class="chip-group period-chips" id="period-chips">
+        <button class="chip-btn active" data-period="2000-2025">Full Record</button>
+        <button class="chip-btn" data-period="2000-2013">2000&ndash;2013</button>
+        <button class="chip-btn" data-period="2014-2025">2014&ndash;2025</button>
+        <button class="chip-btn" data-period="2015-2025">Last 10 Years</button>
+      </div>
+
+      <!-- Dual Range Slider Controls -->
+      <div class="period-range-container">
+        <div class="period-inputs-row">
+          <label class="period-input-wrap">FROM:
+            <input type="number" id="input-period-start" min="2000" max="2025" value="2000" class="year-input">
+          </label>
+          <div class="dual-slider-track">
+            <input type="range" id="slider-period-start" min="2000" max="2025" value="2000" step="1" class="range-thumb range-thumb-start">
+            <input type="range" id="slider-period-end" min="2000" max="2025" value="2025" step="1" class="range-thumb range-thumb-end">
+          </div>
+          <label class="period-input-wrap">TO:
+            <input type="number" id="input-period-end" min="2000" max="2025" value="2025" class="year-input">
+          </label>
+        </div>
+        <!-- Period Warning Notices -->
+        <div class="period-alert warning hidden" id="period-warn-short">⚠️ Short record (&lt; 10 yrs); multi-decadal trend likely unreliable.</div>
+        <div class="period-alert blocked hidden" id="period-warn-blocked">⛔ Statistical significance blocked: requires at least 5 years of observations.</div>
+      </div>
+
+      <div class="control-divider"></div>
+
+      <!-- Section 2: Seasonal Filter -->
+      <div class="control-header-row">
+        <span class="control-header-title">SEASONAL FILTER</span>
+        <span class="control-header-badge font-mono" id="season-badge">ALL YEAR</span>
+      </div>
+
+      <div class="chip-group season-chips" id="season-chips">
+        <button class="chip-btn active" data-season="ALL">All Year</button>
+        <button class="chip-btn" data-season="DJF" title="Dec, Jan, Feb">DJF (Winter)</button>
+        <button class="chip-btn" data-season="MAM" title="Mar, Apr, May">MAM (Spring)</button>
+        <button class="chip-btn" data-season="JJA" title="Jun, Jul, Aug">JJA (Summer / Smoke)</button>
+        <button class="chip-btn" data-season="SON" title="Sep, Oct, Nov">SON (Autumn)</button>
+        <button class="chip-btn" data-season="CUSTOM" id="btn-season-custom">Custom</button>
+      </div>
+
+      <!-- Custom Month Selector (12 Months) -->
+      <div class="custom-months-bar hidden" id="custom-months-bar">
+        <button class="month-btn active" data-month="1" title="January">J</button>
+        <button class="month-btn active" data-month="2" title="February">F</button>
+        <button class="month-btn active" data-month="3" title="March">M</button>
+        <button class="month-btn active" data-month="4" title="April">A</button>
+        <button class="month-btn active" data-month="5" title="May">M</button>
+        <button class="month-btn active" data-month="6" title="June">J</button>
+        <button class="month-btn active" data-month="7" title="July">J</button>
+        <button class="month-btn active" data-month="8" title="August">A</button>
+        <button class="month-btn active" data-month="9" title="September">S</button>
+        <button class="month-btn active" data-month="10" title="October">O</button>
+        <button class="month-btn active" data-month="11" title="November">N</button>
+        <button class="month-btn active" data-month="12" title="December">D</button>
       </div>
     </div>
 
@@ -466,6 +637,7 @@
         <span class="tour-dot active"></span>
         <span class="tour-dot"></span>
         <span class="tour-dot"></span>
+        <span class="tour-dot"></span>
       </div>
       <button class="btn-sm btn-primary" id="btn-tour-next">Next Case &rarr;</button>
     </div>
@@ -481,13 +653,15 @@
       <div class="shortcuts-grid">
         <div class="shortcut-row"><kbd>G</kbd> <span>Toggle Map Projection (Flat / Globe)</span></div>
         <div class="shortcut-row"><kbd>P</kbd> <span>Toggle 3D View / Pitch (0° / 45°)</span></div>
+        <div class="shortcut-row"><kbd>R</kbd> <span>Toggle Selection Mode (Point / Region)</span></div>
+        <div class="shortcut-row"><kbd>D</kbd> <span>Draw Custom Bounding Box Region</span></div>
         <div class="shortcut-row"><kbd>&larr;</kbd> <kbd>&rarr;</kbd> <span>Previous / Next Planetary Variable</span></div>
         <div class="shortcut-row"><kbd>Space</kbd> <span>Play / Pause Monthly Anomaly Scrubber</span></div>
-        <div class="shortcut-row"><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <span>Jump to Case Files (Amazon, Sahel, Tibet)</span></div>
+        <div class="shortcut-row"><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> <span>Jump to Case Files (Amazon, Sahel, Tibet, Canada)</span></div>
         <div class="shortcut-row"><kbd>T</kbd> <span>Toggle Guided Story Tour</span></div>
         <div class="shortcut-row"><kbd>O</kbd> <span>Toggle Opposite Twins Mode</span></div>
         <div class="shortcut-row"><kbd>S</kbd> <span>Toggle Isolated Speckle Filter</span></div>
-        <div class="shortcut-row"><kbd>Esc</kbd> <span>Close Modals / Exit Tour</span></div>
+        <div class="shortcut-row"><kbd>Esc</kbd> <span>Close Modals / Exit Draw Mode</span></div>
       </div>
     </div>
   </div>

@@ -121,6 +121,12 @@ def process_variable(var_id: str) -> Path:
     elif var_id == "merra2_aod":
         raw_dir = Path("data/raw/merra2_aod")
         pattern = "*.nc4"
+    elif var_id.startswith("merra2_"):
+        raw_dir = Path("data/raw/merra2_slv")
+        pattern = "*.nc4"
+    elif var_id.startswith("gldas_"):
+        raw_dir = Path("data/raw/gldas_noah025_m")
+        pattern = "*.nc4"
     else:
         raw_dir = Path("data/raw") / var_cfg.dataset_short_name.lower()
         pattern = f"*.{var_cfg.file_format}"
@@ -195,6 +201,14 @@ def process_variable(var_id: str) -> Path:
 
     regridded_array = np.array(regridded_all, dtype=np.float32)
 
+    # Snow domain thresholding: mask cells with < 50% nonzero snow months
+    if var_id in ("gldas_swe", "gldas_snow_depth"):
+        nonzero_snow_months = np.sum((regridded_array > 0.0) & np.isfinite(regridded_array), axis=0)
+        valid_snow_cells = (nonzero_snow_months / len(files)) >= 0.50
+        n_snow_remaining = int(valid_snow_cells.sum())
+        regridded_array[:, ~valid_snow_cells] = np.nan
+        print(f"[+] Snow Filtering: Masked cells with < 50% non-zero snow. Remaining valid snow cells: {n_snow_remaining} / {72*144} ({n_snow_remaining/(72*144)*100:.1f}%)")
+
     ds_monthly = xr.Dataset(
         data_vars={
             "monthly_val": (("time", "lat", "lon"), regridded_array)
@@ -210,11 +224,45 @@ def process_variable(var_id: str) -> Path:
     climatology = ds_monthly["monthly_val"].groupby("time.month").mean(dim="time")
     anomalies = ds_monthly["monthly_val"].groupby("time.month") - climatology
 
-    # Sanity metric: Global area-weighted mean over valid cells
+    # Sanity metrics per prompt requirement #6
     weights = np.cos(np.deg2rad(TARGET_LATS))
     weights_da = xr.DataArray(weights, coords=[("lat", TARGET_LATS)])
-    weighted_mean = float(ds_monthly["monthly_val"].weighted(weights_da).mean(dim=("lat", "lon")).mean(dim="time").values)
-    print(f"\n[+] Sanity Metric: Global mean {var_cfg.name} = {weighted_mean:.2f} {var_cfg.units}")
+
+    if var_id == "gldas_snow_depth":
+        snow_mean = float(ds_monthly["monthly_val"].weighted(weights_da).mean(dim=("lat", "lon"), skipna=True).mean(dim="time").values)
+        print(f"\n[+] Sanity Metric: Global mean snow depth over snow cells = {snow_mean:.3f} m")
+        weighted_mean = snow_mean
+    elif var_id == "gldas_swe":
+        swe_mean = float(ds_monthly["monthly_val"].weighted(weights_da).mean(dim=("lat", "lon"), skipna=True).mean(dim="time").values)
+        print(f"\n[+] Sanity Metric: Global mean SWE over snow cells = {swe_mean:.2f} kg/m^2")
+        weighted_mean = swe_mean
+    elif var_id == "merra2_ts":
+        gldas_sample_file = next(Path("data/raw/gldas_noah025_m").glob("*.nc4"))
+        with xr.open_dataset(gldas_sample_file) as ds_gldas:
+            t_raw = ds_gldas["Tair_f_inst"].values[0]
+            lats_gldas = ds_gldas["lat"].values
+            gldas_land_grid = regrid_gldas_block(t_raw, lats_gldas)
+            is_ocean = np.isnan(gldas_land_grid)
+        
+        ocean_da = ds_monthly["monthly_val"].where(xr.DataArray(is_ocean, coords=[("lat", TARGET_LATS), ("lon", TARGET_LONS)]))
+        ocean_ts_mean = float(ocean_da.weighted(weights_da).mean(dim=("lat", "lon"), skipna=True).mean(dim="time").values)
+        print(f"\n[+] Sanity Metric: Ocean mean TS = {ocean_ts_mean:.2f} °C")
+        weighted_mean = ocean_ts_mean
+    elif var_id == "merra2_wind":
+        wind_mean = float(ds_monthly["monthly_val"].weighted(weights_da).mean(dim=("lat", "lon"), skipna=True).mean(dim="time").values)
+        print(f"\n[+] Sanity Metric: Global mean wind speed = {wind_mean:.2f} m/s")
+        weighted_mean = wind_mean
+    elif var_id == "merra2_ps":
+        ps_mean = float(ds_monthly["monthly_val"].weighted(weights_da).mean(dim=("lat", "lon"), skipna=True).mean(dim="time").values)
+        print(f"\n[+] Sanity Metric: Global mean PS = {ps_mean:.2f} hPa")
+        weighted_mean = ps_mean
+    elif var_id == "merra2_tqv":
+        tqv_mean = float(ds_monthly["monthly_val"].weighted(weights_da).mean(dim=("lat", "lon"), skipna=True).mean(dim="time").values)
+        print(f"\n[+] Sanity Metric: Global mean total column water vapor = {tqv_mean:.2f} kg/m^2")
+        weighted_mean = tqv_mean
+    else:
+        weighted_mean = float(ds_monthly["monthly_val"].weighted(weights_da).mean(dim=("lat", "lon"), skipna=True).mean(dim="time").values)
+        print(f"\n[+] Sanity Metric: Global mean {var_cfg.name} = {weighted_mean:.2f} {var_cfg.units}")
 
     out_file = PROCESSED_DIR / f"{var_id}_anomalies.nc"
     ds_out = xr.Dataset(
