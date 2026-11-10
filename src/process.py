@@ -2,10 +2,15 @@
 
 Processes raw granules for any variable in variables.py:
   1. Standardizes coordinates (monotonic lat [-90, 90], lon [-180, 180]).
-  2. Conservatively regrids to the project-standard 2.5° global grid (72 x 144).
-  3. Applies variable-specific unit conversion and scaling.
-  4. Computes multi-year monthly climatology and extracts monthly anomalies.
-  5. Saves to data/processed/{var_id}_anomalies.nc.
+  2. For IMERG (0.1°): Conservative 25x25 block area-weighted reduction.
+  3. For GLDAS (0.25°): 10x10 block area-weighted reduction with >= 50% land-fraction threshold.
+     Cells with < 50% land data are masked out as water/polar.
+  4. Applies variable-specific unit conversions:
+     - Tair: Kelvin -> Celsius (K - 273.15)
+     - Soil Moisture: kg/m^2
+     - Rainfall & Evaporation: kg/m^2/s -> mm/month (flux * 86400 * days_in_month)
+  5. Computes multi-year monthly climatology and extracts monthly anomalies.
+  6. Saves to data/processed/{var_id}_anomalies.nc.
 """
 
 from __future__ import annotations
@@ -34,40 +39,71 @@ TARGET_LATS = np.linspace(-88.75, 88.75, 72, dtype=np.float32)
 TARGET_LONS = np.linspace(-178.75, 178.75, 144, dtype=np.float32)
 
 
-def regrid_to_target_grid(
-    src_data: np.ndarray,
+def regrid_imerg_block(raw_data: np.ndarray, raw_lats: np.ndarray) -> np.ndarray:
+    """Regrid 0.1° IMERG (1800 x 3600) to 2.5° (72 x 144) using 25x25 block reduction."""
+    block = raw_data.reshape(72, 25, 144, 25).swapaxes(1, 2)
+    valid = (block >= 0) & np.isfinite(block)
+    lat_rad = np.deg2rad(raw_lats.reshape(72, 25))
+    cos_lat = np.cos(lat_rad)[:, np.newaxis, :, np.newaxis]
+    w = np.where(valid, cos_lat, 0.0)
+    sum_w = np.sum(w, axis=(2, 3))
+    sum_v = np.sum(np.where(valid, block * cos_lat, 0.0), axis=(2, 3))
+    return np.where(sum_w > 0, sum_v / sum_w, np.nan).astype(np.float32)
+
+
+def regrid_gldas_block(
+    raw_data: np.ndarray,
+    raw_lats: np.ndarray,
+    min_land_fraction: float = 0.50,
+) -> np.ndarray:
+    """Regrid 0.25° GLDAS (600 x 1440) to 2.5° (72 x 144).
+    
+    GLDAS covers latitudes -60° to +90° (600 rows).
+    Target 2.5° grid has 72 rows total (-90° to +90°):
+      - Rows 0 to 11 (-90° to -60°): Outside GLDAS coverage (Antarctica) -> NaN
+      - Rows 12 to 71 (-60° to +90°): 60 rows corresponding exactly to 600 / 10 = 60 blocks.
+    Masks any 2.5° cell with < 50% valid land data.
+    """
+    out = np.full((72, 144), np.nan, dtype=np.float32)
+    
+    # Check if raw_lats are decreasing, flip if necessary
+    if raw_lats[0] > raw_lats[-1]:
+        raw_data = raw_data[::-1, :]
+        raw_lats = raw_lats[::-1]
+
+    # Reshape GLDAS (600, 1440) into 60 x 10 x 144 x 10 -> (60, 144, 10, 10)
+    block = raw_data.reshape(60, 10, 144, 10).swapaxes(1, 2)
+    valid = np.isfinite(block)
+
+    # Land fraction in each 10x10 block
+    land_fraction = np.mean(valid, axis=(2, 3))  # (60, 144)
+
+    # Cosine-latitude area weights
+    lat_rad = np.deg2rad(raw_lats.reshape(60, 10))
+    cos_lat = np.cos(lat_rad)[:, np.newaxis, :, np.newaxis]
+
+    w = np.where(valid, cos_lat, 0.0)
+    sum_w = np.sum(w, axis=(2, 3))
+    sum_v = np.sum(np.where(valid, block * cos_lat, 0.0), axis=(2, 3))
+
+    valid_cells = (land_fraction >= min_land_fraction) & (sum_w > 0)
+    gldas_regridded = np.where(valid_cells, sum_v / np.where(sum_w > 0, sum_w, 1.0), np.nan)
+
+    # Place into target grid rows 12..71 (-60 to +90)
+    out[12:72, :] = gldas_regridded.astype(np.float32)
+    return out
+
+
+def regrid_merra2_interp(
+    raw_data: np.ndarray,
     src_lats: np.ndarray,
     src_lons: np.ndarray,
 ) -> np.ndarray:
-    """Conservatively regrid a 2D spatial slice to the standard 2.5° (72, 144) grid."""
-    # Ensure source latitudes are monotonically increasing
-    if src_lats[0] > src_lats[-1]:
-        src_lats = src_lats[::-1]
-        src_data = src_data[::-1, :]
-
-    # If grid is exactly 1800x3600 (0.1° IMERG), use fast block reduction
-    if src_data.shape == (1800, 3600):
-        block = src_data.reshape(72, 25, 144, 25).swapaxes(1, 2)
-        valid = (block >= 0) & np.isfinite(block)
-        lat_rad = np.deg2rad(src_lats.reshape(72, 25))
-        cos_lat = np.cos(lat_rad)[:, np.newaxis, :, np.newaxis]
-        w = np.where(valid, cos_lat, 0.0)
-        sum_w = np.sum(w, axis=(2, 3))
-        sum_v = np.sum(np.where(valid, block * cos_lat, 0.0), axis=(2, 3))
-        return np.where(sum_w > 0, sum_v / sum_w, np.nan).astype(np.float32)
-
-    # If grid is 600x1440 (0.25° GLDAS), 600/10 = 60 lat? Wait: 600 * 0.25 = 150 deg (-60 to 90).
-    # For general grids, use area-weighted regular grid interpolation / aggregation:
-    interp = RegularGridInterpolator(
-        (src_lats, src_lons),
-        src_data,
-        bounds_error=False,
-        fill_value=np.nan,
-    )
-    lon_mesh, lat_mesh = np.meshgrid(TARGET_LONS, TARGET_LATS)
-    pts = np.stack([lat_mesh.ravel(), lon_mesh.ravel()], axis=-1)
-    regridded = interp(pts).reshape(72, 144)
-    return regridded.astype(np.float32)
+    """Regrid MERRA-2 (361 x 576) to 2.5° (72 x 144) using 2D linear interpolation."""
+    mesh_lat, mesh_lon = np.meshgrid(TARGET_LATS, TARGET_LONS, indexing="ij")
+    pts = np.stack([mesh_lat.ravel(), mesh_lon.ravel()], axis=-1)
+    interp = RegularGridInterpolator((src_lats, src_lons), raw_data, method="linear", bounds_error=False, fill_value=np.nan)
+    return interp(pts).reshape(72, 144).astype(np.float32)
 
 
 def process_variable(var_id: str) -> Path:
@@ -82,6 +118,9 @@ def process_variable(var_id: str) -> Path:
     if var_cfg.dataset_short_name == "GPM_3IMERGM":
         raw_dir = Path("data/raw")
         pattern = "*.HDF5"
+    elif var_id == "merra2_aod":
+        raw_dir = Path("data/raw/merra2_aod")
+        pattern = "*.nc4"
     else:
         raw_dir = Path("data/raw") / var_cfg.dataset_short_name.lower()
         pattern = f"*.{var_cfg.file_format}"
@@ -98,48 +137,50 @@ def process_variable(var_id: str) -> Path:
 
     for idx, fpath in enumerate(files):
         # Extract date from filename
-        # Pattern 1: .YYYYMM01- or .AYYYYMM.
         match = re.search(r"[\.A](\d{4})(\d{2})", fpath.name)
         if not match:
             continue
         year, month = int(match.group(1)), int(match.group(2))
         time_coords.append(pd.Timestamp(year=year, month=month, day=1))
 
-        # Open dataset
         group = var_cfg.source_group
         engine = "netcdf4" if var_cfg.file_format.lower() in ("hdf5", "nc4") else None
         
-        try:
-            with xr.open_dataset(fpath, group=group, engine=engine) as ds:
-                da = ds[var_cfg.source_variable]
-                
-                # Check lat/lon coord names
-                lat_name = "lat" if "lat" in ds.coords else ("latitude" if "latitude" in ds.coords else None)
-                lon_name = "lon" if "lon" in ds.coords else ("longitude" if "longitude" in ds.coords else None)
-                
-                src_lats = ds[lat_name].values
-                src_lons = ds[lon_name].values
-                
-                # Get 2D slice
-                raw_slice = da.values
-                while raw_slice.ndim > 2:
-                    raw_slice = raw_slice[0]
-                
-                # IMERG transposed check: (lon, lat) vs (lat, lon)
-                if raw_slice.shape == (len(src_lons), len(src_lats)):
-                    raw_slice = raw_slice.T
-        except Exception:
-            continue
+        with xr.open_dataset(fpath, group=group, engine=engine) as ds:
+            src_var = var_cfg.source_variable
+            if src_var not in ds and "TOTEXTTAU" in ds:
+                src_var = "TOTEXTTAU"
+            da = ds[src_var]
+            lat_name = "lat" if "lat" in ds.coords else ("latitude" if "latitude" in ds.coords else None)
+            lon_name = "lon" if "lon" in ds.coords else ("longitude" if "longitude" in ds.coords else None)
+            
+            src_lats = ds[lat_name].values
+            src_lons = ds[lon_name].values
+            
+            raw_slice = da.values
+            while raw_slice.ndim > 2:
+                raw_slice = raw_slice[0]
+            
+            if raw_slice.shape == (len(src_lons), len(src_lats)):
+                raw_slice = raw_slice.T
 
-        # Regrid to 2.5°
-        regridded = regrid_to_target_grid(raw_slice, src_lats, src_lons)
+        # Regrid based on dataset geometry
+        if raw_slice.shape == (1800, 3600):
+            regridded = regrid_imerg_block(raw_slice, src_lats)
+        elif raw_slice.shape == (600, 1440):
+            regridded = regrid_gldas_block(raw_slice, src_lats, min_land_fraction=0.50)
+        elif raw_slice.shape == (361, 576):
+            regridded = regrid_merra2_interp(raw_slice, src_lats, src_lons)
+        else:
+            raise NotImplementedError(f"Unsupported grid shape: {raw_slice.shape}")
 
-        # Apply variable-specific scaling
+        # Variable-specific unit conversion
+        days = calendar.monthrange(year, month)[1]
         if var_cfg.is_flux_rate:
-            days = calendar.monthrange(year, month)[1]
             if var_cfg.aggregation == "hours_per_month_integral":
                 regridded = regridded * (days * 24.0)
-            elif var_cfg.aggregation == "kg_m2_s_to_mm_month":
+            elif var_cfg.aggregation in ("kg_m2_s_to_mm_month", "rate_flux_to_monthly"):
+                # kg/m^2/s = mm/s * 86400 s/day * days = mm/month
                 regridded = regridded * (days * 86400.0)
 
         if var_cfg.scale_factor != 1.0:
@@ -154,7 +195,6 @@ def process_variable(var_id: str) -> Path:
 
     regridded_array = np.array(regridded_all, dtype=np.float32)
 
-    # Build monthly Dataset
     ds_monthly = xr.Dataset(
         data_vars={
             "monthly_val": (("time", "lat", "lon"), regridded_array)
@@ -166,9 +206,15 @@ def process_variable(var_id: str) -> Path:
         },
     )
 
-    # Multi-year Climatology & Anomalies
+    # Climatology & Anomalies
     climatology = ds_monthly["monthly_val"].groupby("time.month").mean(dim="time")
     anomalies = ds_monthly["monthly_val"].groupby("time.month") - climatology
+
+    # Sanity metric: Global area-weighted mean over valid cells
+    weights = np.cos(np.deg2rad(TARGET_LATS))
+    weights_da = xr.DataArray(weights, coords=[("lat", TARGET_LATS)])
+    weighted_mean = float(ds_monthly["monthly_val"].weighted(weights_da).mean(dim=("lat", "lon")).mean(dim="time").values)
+    print(f"\n[+] Sanity Metric: Global mean {var_cfg.name} = {weighted_mean:.2f} {var_cfg.units}")
 
     out_file = PROCESSED_DIR / f"{var_id}_anomalies.nc"
     ds_out = xr.Dataset(
@@ -179,8 +225,13 @@ def process_variable(var_id: str) -> Path:
                 {
                     "units": var_cfg.units,
                     "long_name": f"{var_cfg.name} Anomaly",
-                    "description": f"Deseasonalized monthly anomalies relative to 2000-2025 climatology.",
+                    "description": "Deseasonalized monthly anomalies relative to 2000-2025 climatology.",
                 },
+            ),
+            f"{var_id}_monthly": (
+                ("time", "lat", "lon"),
+                regridded_array,
+                {"units": var_cfg.units, "long_name": f"{var_cfg.name} Total Monthly Value"},
             ),
             f"{var_id}_climatology": (
                 ("month", "lat", "lon"),
@@ -198,7 +249,8 @@ def process_variable(var_id: str) -> Path:
             "variable_name": var_cfg.name,
             "units": var_cfg.units,
             "source_dataset": f"{var_cfg.dataset_short_name} v{var_cfg.version}",
-            "regridding": "Conservative 2.5° area-weighted reduction",
+            "regridding": "Conservative 2.5° area-weighted reduction with >= 50% land coverage mask",
+            "global_mean": f"{weighted_mean:.2f} {var_cfg.units}",
             "created_at": datetime.utcnow().isoformat(),
         },
     )
@@ -207,7 +259,6 @@ def process_variable(var_id: str) -> Path:
     ds_out.to_netcdf(out_file, encoding=encoding)
     print(f"[+] Successfully wrote {out_file} ({out_file.stat().st_size / (1024*1024):.2f} MB)")
 
-    # Also keep precip_anomalies.nc synced for backwards compatibility
     if var_id == "gpm_precip":
         compat_file = PROCESSED_DIR / "precip_anomalies.nc"
         if not compat_file.exists():

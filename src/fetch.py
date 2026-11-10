@@ -107,22 +107,31 @@ def fetch_dataset(var_id: str, dry_run: bool = False, limit: int | None = None) 
     login_earthdata()
 
     granules_to_fetch = remaining_granules[:limit] if limit else remaining_granules
-    print(f"[*] Downloading {len(granules_to_fetch)} granules...")
+    print(f"[*] Downloading {len(granules_to_fetch)} granules in parallel (threads=6)...")
 
-    success = 0
-    for idx, g in enumerate(granules_to_fetch, start=1):
-        native_id = g["meta"]["native-id"]
-        fname = native_id.split(":")[-1] if ":" in native_id else native_id
-        print(f"[{idx}/{len(granules_to_fetch)}] Downloading {fname}...")
-        try:
-            files = earthaccess.download(g, str(target_dir))
-            if files and Path(files[0]).exists():
+    try:
+        downloaded_files = earthaccess.download(granules_to_fetch, str(target_dir), threads=6)
+        success = len([f for f in downloaded_files if Path(f).exists() and Path(f).stat().st_size > 500_000])
+    except Exception as exc:
+        print(f"[-] Parallel download batch encountered issue: {exc}. Retrying remaining sequentially...")
+        success = 0
+        for idx, g in enumerate(granules_to_fetch, start=1):
+            native_id = g["meta"]["native-id"]
+            fname = native_id.split(":")[-1] if ":" in native_id else native_id
+            target_path = target_dir / fname
+            if target_path.exists() and target_path.stat().st_size > 500_000:
                 success += 1
-                print(f"    [+] Saved {fname}")
-        except Exception as exc:
-            print(f"    [-] Failed: {exc}")
+                continue
+            print(f"[{idx}/{len(granules_to_fetch)}] Downloading {fname}...")
+            try:
+                files = earthaccess.download(g, str(target_dir))
+                if files and Path(files[0]).exists():
+                    success += 1
+                    print(f"    [+] Saved {fname}")
+            except Exception as e:
+                print(f"    [-] Failed: {e}")
 
-    print(f"[+] Download batch finished: {success} files downloaded.")
+    print(f"[+] Download batch finished: {success} files verified on disk.")
     return 0
 
 

@@ -2,186 +2,509 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Plot Twist - Global Trend Detector</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    /* Loading screen fade-out animation */
-    #loading-screen {
-      transition: opacity 0.5s ease-out, visibility 0.5s ease-out;
-    }
-    #loading-screen.fade-out {
-      opacity: 0;
-      visibility: hidden;
-    }
-    @keyframes pulse-ring {
-      0% { transform: scale(0.95); opacity: 0.8; }
-      50% { transform: scale(1.05); opacity: 0.4; }
-      100% { transform: scale(0.95); opacity: 0.8; }
-    }
-    .pulse-ring {
-      animation: pulse-ring 2.5s infinite ease-in-out;
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>p &lt; 0.05 / Plot Twist | Planetary Multi-Decadal Trend Detector</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%2322D3EE'/></svg>">
+  
+  <!-- NASA Mission Control Typography: Barlow Condensed (Headings & Technical Labels), Inter (Body UI), IBM Plex Mono (Telemetry Numbers) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;1,600&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- MapLibre GL JS v5.24.0 (Enhanced Globe & Dynamic Projection Switch Support) -->
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
+  <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+  
+  <!-- GSAP for Smooth Motion & Transitions -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  
+  <!-- D3 for Scales and Math -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+  
+  <!-- ECharts 5.5 for High-Performance Dark Dashboard Charts -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  
+  <!-- TopoJSON Client for Offline/Fallback Coastline Basemap -->
+  <script src="topojson-client.min.js"></script>
+  
+  <link rel="stylesheet" href="style.css">
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-center p-6 relative font-sans">
+<body class="mission-control">
 
-  <!-- ========================================== -->
-  <!-- 1. THE SELF-DELETING LOADING SCREEN OVERLAY -->
-  <!-- ========================================== -->
-  <div id="loading-screen" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/95 backdrop-blur-md">
-    <div class="relative flex items-center justify-center mb-6">
-      <!-- Pulsing radar rings -->
-      <div class="absolute w-28 h-28 rounded-full border border-cyan-500/30 pulse-ring"></div>
-      <div class="absolute w-20 h-20 rounded-full border border-cyan-400/50 pulse-ring" style="animation-delay: -0.8s;"></div>
-      
-      <!-- Center Satellite / Earth Globe Icon -->
-      <div class="w-14 h-14 rounded-full bg-cyan-950/80 border border-cyan-400/80 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-        <svg class="w-7 h-7 text-cyan-400 animate-spin" style="animation-duration: 6s;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <circle cx="12" cy="12" r="10" stroke-width="2" stroke="currentColor" stroke-dasharray="4 4" />
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 0110 10M12 22a10 10 0 01-10-10" />
+  <!-- Fullscreen Map Canvas Container -->
+  <div id="map-container">
+    <div id="map"></div>
+
+    <div id="map-crosshair" class="crosshair-hidden">
+      <div class="crosshair-v"></div>
+      <div class="crosshair-h"></div>
+    </div>
+
+    <!-- Floating Map Action Controls (3D Tilt & Reset North Compass) -->
+    <div class="map-action-controls" id="map-action-controls">
+      <button class="tilt-toggle-btn" id="btn-toggle-tilt" aria-label="Toggle 3D View" title="Toggle 3D View / Pitch (0° / 45°) [P]">
+        <svg class="tilt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 2 7 12 12 22 7 12 2" />
+          <polyline points="2 17 12 22 22 17" />
+          <polyline points="2 12 12 17 22 12" />
         </svg>
-      </div>
-    </div>
+        <span class="tilt-label font-mono" id="tilt-label">2D</span>
+      </button>
 
-    <!-- Status Messages -->
-    <h2 id="loading-title" class="text-lg font-semibold tracking-wide text-white mb-1">
-      Plot Twist
-    </h2>
-    <p id="loading-status" class="text-xs text-cyan-300 font-mono mb-4">
-      Loading Earth Science Precipitation Pipeline...
-    </p>
-
-    <!-- Progress Bar -->
-    <div class="w-64 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700/60">
-      <div id="loading-progress" class="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-300 w-0"></div>
-    </div>
-    <span id="loading-percentage" class="text-[11px] font-mono text-slate-400 mt-2">0%</span>
-  </div>
-
-  <!-- ========================================== -->
-  <!-- 2. MAIN WEBSITE CONTENT (Appears after delete) -->
-  <!-- ========================================== -->
-  <main class="max-w-2xl w-full text-center space-y-6">
-    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-800/60 text-cyan-400 text-xs font-mono">
-      <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-      NASA Hackathon Challenge: Plot Twist
-    </div>
-    
-    <h1 class="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-      Earth Science Variable Trends
-    </h1>
-    
-    <p class="text-slate-400 text-sm max-w-lg mx-auto">
-      Pin any point on the globe to inspect non-parametric Mann-Kendall precipitation trends and Sen’s slope anomalies (2000–2025).
-    </p>
-
-    <div class="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl space-y-4">
-      <div class="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800 pb-3">
-        <span>Loading Screen State:</span>
-        <span class="text-emerald-400 font-mono font-medium">Deleted from DOM</span>
-      </div>
-      <p class="text-xs text-slate-400">
-        You can re-trigger a simulated loading screen to test the lifecycle again:
-      </p>
-      <button onclick="recreateLoadingScreen()" class="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs transition shadow-md shadow-cyan-600/20">
-        Re-test Loading Screen
+      <!-- Floating Reset North Compass Button -->
+      <button class="compass-reset-btn hidden" id="btn-reset-north" aria-label="Reset North" title="Reset view to North (0° pitch / bearing)">
+        <svg class="compass-needle" id="compass-needle-svg" viewBox="0 0 24 24" fill="none">
+          <polygon points="12,3 15.5,12 12,9.5 8.5,12" fill="#FF6B35" />
+          <polygon points="12,21 15.5,12 12,14.5 8.5,12" fill="#7E91A8" />
+        </svg>
+        <span class="compass-label font-mono">N</span>
       </button>
     </div>
-  </main>
+  </div>
 
-  <!-- ========================================== -->
-  <!-- 3. LIFECYCLE CONTROLLER (Deletes upon finish) -->
-  <!-- ========================================== -->
-  <script>
-    function startLoadingSequence(elementId = 'loading-screen') {
-      const loader = document.getElementById(elementId);
-      const progressBar = document.getElementById('loading-progress');
-      const statusText = document.getElementById('loading-status');
-      const percentageText = document.getElementById('loading-percentage');
+  <!-- Top HUD Header -->
+  <header class="hud-header">
+    <div class="hud-header-left">
+      <div class="brand-badge">
+        <span class="badge-pulse"></span>
+        <span class="brand-code">p &lt; 0.05</span>
+      </div>
+      <div class="brand-text">
+        <h1 class="brand-title">PLOT TWIST</h1>
+        <p class="brand-tagline">Planetary Multi-Decadal Trend &amp; Era Shift Detector &bull; 2000–2025</p>
+      </div>
+    </div>
 
-      if (!loader) return;
+    <!-- Center Group: Projection Toggle + Case Tour Trigger -->
+    <div class="hud-header-center">
+      <!-- Projection Toggle (Flat Map / Globe) -->
+      <div class="projection-toggle" role="radiogroup" aria-label="Map Projection" id="proj-toggle-group">
+        <div class="toggle-pill-slider" id="proj-pill-slider"></div>
+        <button class="proj-btn" id="btn-proj-flat" role="radio" aria-checked="false" aria-label="Flat map view" title="Flat map view (Mercator) [G]" tabindex="0">
+          <svg class="proj-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3.5" y="3.5" width="17" height="17" rx="2.5" />
+            <line x1="3.5" y1="12" x2="20.5" y2="12" stroke-dasharray="2 2" stroke-opacity="0.45"/>
+            <line x1="12" y1="3.5" x2="12" y2="20.5" stroke-dasharray="2 2" stroke-opacity="0.45"/>
+          </svg>
+          <span class="proj-label">Flat</span>
+        </button>
+        <button class="proj-btn active" id="btn-proj-globe" role="radio" aria-checked="true" aria-label="Globe view" title="Globe view (3D Sphere) [G]" tabindex="0">
+          <svg class="proj-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="8.5" />
+            <ellipse cx="12" cy="12" rx="4" ry="8.5" stroke-opacity="0.55"/>
+            <line x1="3.5" y1="12" x2="20.5" y2="12" stroke-opacity="0.55"/>
+          </svg>
+          <span class="proj-label">Globe</span>
+        </button>
+      </div>
 
-      const steps = [
-        { progress: 25, text: "Authenticating Earthdata connection..." },
-        { progress: 55, text: "Fetching GPM IMERG V07 anomalies..." },
-        { progress: 85, text: "Applying 2.5° conservative grid weights..." },
-        { progress: 100, text: "Ready!" }
-      ];
+      <div class="case-tour-trigger" id="btn-start-tour" title="Launch guided detective tour">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        <span>Case Files</span>
+      </div>
+    </div>
 
-      let stepIdx = 0;
-      const interval = setInterval(() => {
-        if (stepIdx < steps.length) {
-          const step = steps[stepIdx];
-          progressBar.style.width = step.progress + '%';
-          percentageText.textContent = step.progress + '%';
-          statusText.textContent = step.text;
-          stepIdx++;
-        } else {
-          clearInterval(interval);
-          finishAndRemoveLoadingScreen(loader);
-        }
-      }, 400);
-    }
+    <div class="hud-header-right">
+      <div class="hud-telemetry" id="header-telemetry">
+        <span class="telemetry-item"><span class="telemetry-label">OBSERVATIONS:</span> <strong class="telemetry-val">304 MO</strong></span>
+        <span class="telemetry-sep">|</span>
+        <span class="telemetry-item"><span class="telemetry-label">GRID:</span> <strong class="telemetry-val">2.5&deg; (&times;10,368)</strong></span>
+      </div>
+      <button class="hud-icon-btn" id="btn-shortcuts" title="Keyboard Shortcuts (?)">
+        <span class="key-hint">?</span>
+      </button>
+    </div>
+  </header>
 
-    /**
-     * Fades out and completely deletes the loading screen element from the DOM.
-     */
-    function finishAndRemoveLoadingScreen(loaderElement) {
-      if (!loaderElement) return;
+  <!-- Left Floating Panel: Variable Control & Layers -->
+  <aside class="panel-floating panel-left" id="panel-left">
+    <div class="panel-section-header">
+      <span class="section-title">PLANETARY VARIABLES</span>
+      <span class="section-badge" id="active-var-badge">GPM</span>
+    </div>
 
-      // 1. Trigger CSS fade-out transition
-      loaderElement.classList.add('fade-out');
+    <nav class="variable-nav" id="variable-picker" aria-label="Variable Selection">
+      <!-- Generated via JS -->
+    </nav>
 
-      // 2. Remove completely from the DOM when the transition completes
-      loaderElement.addEventListener('transitionend', () => {
-        if (loaderElement.parentNode) {
-          loaderElement.remove();
-          console.log("[Plot Twist] Loading screen finished and removed from DOM.");
-        }
-      }, { once: true });
+    <div class="panel-divider"></div>
 
-      // Fallback safeguard in case transitionend is canceled/skipped
-      setTimeout(() => {
-        if (loaderElement.parentNode) {
-          loaderElement.remove();
-        }
-      }, 600);
-    }
+    <div class="panel-section-header">
+      <span class="section-title">DETECTION MODES</span>
+    </div>
 
-    // Auto-start on initial page load
-    window.addEventListener('DOMContentLoaded', () => {
-      startLoadingSequence('loading-screen');
-    });
+    <div class="mode-toggles">
+      <label class="toggle-control" id="toggle-twins-wrap">
+        <input type="checkbox" id="toggle-opposite-twins">
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-label">
+          <strong>Opposite Twins</strong>
+          <small>Isolate bipolar significant regimes</small>
+        </span>
+      </label>
 
-    // Helper to test multiple times
-    function recreateLoadingScreen() {
-      if (document.getElementById('loading-screen')) return;
+      <label class="toggle-control" id="toggle-speckle-wrap">
+        <input type="checkbox" id="toggle-speckle-filter">
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-label">
+          <strong>Isolated-Cell Filter</strong>
+          <small>Removes lone speckle (&ge;3 of 8 match)</small>
+        </span>
+      </label>
+    </div>
 
-      const div = document.createElement('div');
-      div.id = 'loading-screen';
-      div.className = 'fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/95 backdrop-blur-md';
-      div.innerHTML = `
-        <div class="relative flex items-center justify-center mb-6">
-          <div class="absolute w-28 h-28 rounded-full border border-cyan-500/30 pulse-ring"></div>
-          <div class="absolute w-20 h-20 rounded-full border border-cyan-400/50 pulse-ring" style="animation-delay: -0.8s;"></div>
-          <div class="w-14 h-14 rounded-full bg-cyan-950/80 border border-cyan-400/80 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-            <svg class="w-7 h-7 text-cyan-400 animate-spin" style="animation-duration: 6s;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <circle cx="12" cy="12" r="10" stroke-width="2" stroke="currentColor" stroke-dasharray="4 4" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 0110 10M12 22a10 10 0 01-10-10" />
-            </svg>
+    <div class="panel-divider"></div>
+
+    <!-- Dynamic Legend -->
+    <div class="legend-card" id="map-legend">
+      <div class="legend-header">
+        <span class="legend-title" id="legend-title">SEN'S SLOPE TREND</span>
+        <span class="legend-unit" id="legend-unit">mm/mo/decade</span>
+      </div>
+      <div class="legend-bar-wrap">
+        <div class="legend-bar" id="legend-bar-fill"></div>
+      </div>
+      <div class="legend-axis">
+        <span class="legend-val" id="legend-min">-15.0</span>
+        <span class="legend-val legend-mid">0.0 (Neutral)</span>
+        <span class="legend-val" id="legend-max">+15.0</span>
+      </div>
+      <div class="legend-stipple-note">
+        <span class="stipple-dot"></span>
+        <span>Stippled cells: Significant at q &lt; 0.05 (FDR)</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Right Floating Panel: Investigation Inspector -->
+  <aside class="panel-floating panel-right" id="panel-right">
+    <!-- Pinned Coordinate Header -->
+    <div class="inspector-location-header">
+      <div class="pin-badge">
+        <svg class="icon-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <span class="pin-coords" id="inspector-coords">LAT: -3.75&deg;, LON: -61.25&deg;</span>
+      </div>
+      <div class="location-name" id="inspector-name">Amazon Basin, South America</div>
+    </div>
+
+    <!-- Real-Time Monthly Observation Telemetry -->
+    <div class="obs-telemetry-card" id="obs-telemetry-card">
+      <div class="obs-telemetry-header">
+        <div class="obs-live-pill" id="obs-live-pill">
+          <span class="live-dot-pulse"></span>
+          <span class="obs-header-label" id="obs-header-label">CURRENT OBSERVATION</span>
+        </div>
+        <span class="obs-date-badge font-mono" id="obs-date-badge">JUN 2000 [M001]</span>
+      </div>
+
+      <div class="obs-metric-grid">
+        <div class="obs-metric-block primary-obs">
+          <span class="metric-label">MONTHLY ANOMALY</span>
+          <div class="metric-number-row">
+            <span class="metric-val font-mono" id="obs-anomaly-val">+0.00</span>
+            <span class="metric-unit" id="obs-anomaly-unit">mm/month</span>
           </div>
         </div>
-        <h2 id="loading-title" class="text-lg font-semibold tracking-wide text-white mb-1">Plot Twist</h2>
-        <p id="loading-status" class="text-xs text-cyan-300 font-mono mb-4">Reloading dataset...</p>
-        <div class="w-64 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700/60">
-          <div id="loading-progress" class="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-300 w-0"></div>
+        <div class="obs-metric-block">
+          <span class="metric-label">DEPARTURE (&sigma;)</span>
+          <span class="metric-val font-mono" id="obs-zscore-val">+0.0 &sigma;</span>
         </div>
-        <span id="loading-percentage" class="text-[11px] font-mono text-slate-400 mt-2">0%</span>
-      `;
-      document.body.appendChild(div);
-      startLoadingSequence('loading-screen');
-    }
-  </script>
+        <div class="obs-metric-block">
+          <span class="metric-label">12-MO RUNNING</span>
+          <span class="metric-val font-mono" id="obs-rolling-val">--</span>
+        </div>
+      </div>
+
+      <!-- Departure Gauge Bar -->
+      <div class="obs-gauge-container">
+        <div class="obs-gauge-track">
+          <div class="obs-gauge-center"></div>
+          <div class="obs-gauge-bar" id="obs-gauge-bar"></div>
+          <div class="obs-gauge-marker" id="obs-gauge-marker"></div>
+        </div>
+        <div class="obs-gauge-labels font-mono">
+          <span>-3&sigma; (Deficit)</span>
+          <span>0.0</span>
+          <span>+3&sigma; (Surplus)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dynamic Verdict Card -->
+    <div class="verdict-card state-neutral" id="verdict-card">
+      <div class="verdict-header">
+        <div class="verdict-status-pill" id="verdict-status-pill">
+          <span class="status-indicator-dot"></span>
+          <span class="status-title" id="verdict-status-text">ANALYZING SIGNAL...</span>
+        </div>
+        <span class="verdict-confidence-badge" id="verdict-fdr-badge">FDR q = 0.013</span>
+      </div>
+
+      <div class="verdict-metric-grid">
+        <div class="metric-block primary-metric">
+          <span class="metric-label">SEN'S SLOPE RATE</span>
+          <div class="metric-number-row">
+            <span class="metric-val" id="val-rate">-9.27</span>
+            <span class="metric-unit" id="val-unit">mm/mo/dec</span>
+          </div>
+        </div>
+        <div class="metric-block">
+          <span class="metric-label">AUTOCORR p<sub>HR</sub></span>
+          <span class="metric-val font-mono" id="val-phr">0.0132</span>
+        </div>
+        <div class="metric-block">
+          <span class="metric-label">STANDARD p<sub>plain</sub></span>
+          <span class="metric-val font-mono" id="val-pplain">0.0084</span>
+        </div>
+      </div>
+
+      <!-- Confidence Interval Visual Range Bar -->
+      <div class="ci-range-container">
+        <div class="ci-header">
+          <span class="ci-label">95% CONFIDENCE INTERVAL (DECADE)</span>
+          <span class="ci-bounds font-mono" id="ci-bounds-text">[-15.4, -3.1]</span>
+        </div>
+        <div class="ci-track-bar">
+          <div class="ci-zero-line"></div>
+          <div class="ci-range-span" id="ci-range-span"></div>
+          <div class="ci-point-marker" id="ci-point-marker"></div>
+        </div>
+      </div>
+
+      <!-- Caution Callout (Only appears when era step survives or signs flip) -->
+      <div class="verdict-caution-box" id="verdict-caution-box">
+        <div class="caution-title">
+          <svg class="icon-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span id="caution-header-text">OBSERVING SYSTEM SHIFT NOTICE</span>
+        </div>
+        <p class="caution-body" id="verdict-caution-text">
+          Supported by two datasets, consistent with drought years (2015/16, 2020, 2023/24), not proven. Both IMERG and GLDAS show sharp post-2014 drying, but neither era is significant on its own.
+        </p>
+      </div>
+
+      <!-- Mandatory Scientific Honesty Disclaimer -->
+      <div class="verdict-disclaimer">
+        <em>Trend over 2000&ndash;2025; may reflect natural cycles like ENSO. Trend is not cause.</em>
+      </div>
+    </div>
+
+    <!-- Time Series Plotly/ECharts Container -->
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <span class="chart-card-title">25-YEAR ANOMALY TRAJECTORY</span>
+        <div class="chart-legend-pills">
+          <span class="pill-dot pill-raw"></span><span>Monthly</span>
+          <span class="pill-dot pill-rolling"></span><span>12-Mo Mean</span>
+          <span class="pill-dot pill-trend"></span><span>Sen Slope</span>
+          <span class="pill-dot pill-break"></span><span>2014 Era</span>
+        </div>
+      </div>
+      <div id="chart-timeseries" class="echarts-container"></div>
+    </div>
+
+    <!-- Detectability Clock -->
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <span class="chart-card-title">DETECTABILITY CLOCK (PROGRESSIVE WINDOW)</span>
+        <span class="clock-readout" id="clock-status-pill">Significant after 18.2 yrs</span>
+      </div>
+      <div id="chart-detectability" class="echarts-container-sm"></div>
+    </div>
+
+    <!-- Local Planetary Lineup Panel -->
+    <div class="lineup-card">
+      <div class="lineup-header">
+        <div>
+          <span class="lineup-title">LOCAL PLANETARY LINEUP</span>
+          <span class="lineup-sub" id="lineup-sub-label">Ranked by normalized anomaly magnitude</span>
+        </div>
+        <div class="lineup-mode-toggle">
+          <button id="btn-lineup-monthly" class="lineup-toggle-btn active" title="Show current month anomaly">MONTH</button>
+          <button id="btn-lineup-trend" class="lineup-toggle-btn" title="Show 25-yr trend slope">TREND</button>
+        </div>
+      </div>
+      <div class="lineup-table" id="lineup-table">
+        <!-- Rendered via JS -->
+      </div>
+    </div>
+  </aside>
+
+  <!-- Bottom Floating HUD: Time Scrubber & Anomaly Player -->
+  <footer class="hud-bottom-bar" id="hud-bottom-bar">
+    <div class="scrubber-controls">
+      <button class="scrubber-play-btn" id="btn-play-pause" title="Play/Pause monthly anomaly filmstrip (Space)">
+        <svg class="icon-play" id="icon-play" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+        <svg class="icon-pause hidden" id="icon-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+      </button>
+
+      <div class="view-switch-btn-group">
+        <button class="view-btn active" id="btn-view-trend">25-YR TREND MAP</button>
+        <button class="view-btn" id="btn-view-monthly">MONTHLY ANOMALIES</button>
+      </div>
+
+      <div class="scrubber-timeline-container">
+        <div class="timeline-labels">
+          <span class="timeline-date font-mono" id="scrubber-current-date">JUN 2000 (Month 1 of 304)</span>
+          <span class="timeline-event-tag" id="scrubber-event-tag">Baseline Observation Era</span>
+        </div>
+        <input type="range" class="scrubber-slider" id="scrubber-slider" min="0" max="303" value="0" step="1">
+        <div class="timeline-ticks">
+          <span>2000</span>
+          <span>2005</span>
+          <span>2010</span>
+          <span class="tick-highlight">2014 (GPM)</span>
+          <span>2020</span>
+          <span>2025</span>
+        </div>
+      </div>
+
+      <div class="scrubber-speed-group">
+        <button class="speed-btn" data-speed="0.25">0.25&times;</button>
+        <button class="speed-btn" data-speed="0.5">0.5&times;</button>
+        <button class="speed-btn active" data-speed="1">1&times;</button>
+        <button class="speed-btn" data-speed="2">2&times;</button>
+        <button class="speed-btn" data-speed="4">4&times;</button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Floating Hover Tooltip -->
+  <div id="hover-tooltip" class="floating-tooltip hidden">
+    <div class="tooltip-header">
+      <span class="tooltip-coords" id="tt-coords">0.0&deg;, 0.0&deg;</span>
+      <span class="tooltip-status" id="tt-status">SIGNIFICANT</span>
+    </div>
+    <div class="tooltip-body">
+      <div class="tt-row">
+        <span class="tt-k">Rate:</span>
+        <strong class="tt-v font-mono" id="tt-rate">+0.00</strong>
+      </div>
+      <div class="tt-row">
+        <span class="tt-k">p (HR):</span>
+        <span class="tt-v font-mono" id="tt-phr">0.000</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Intro Screen Overlay Modal -->
+  <div class="intro-overlay" id="intro-overlay">
+    <div class="intro-backdrop"></div>
+    <div class="intro-card">
+      <div class="intro-eyebrow">
+        <span class="intro-badge">p &lt; 0.05</span>
+        <span>A PLANETARY CLIMATE DETECTIVE STORY</span>
+      </div>
+      <h2 class="intro-title">PLOT TWIST</h2>
+      <p class="intro-lead">
+        NASA has observed our changing planet from orbit for over a quarter-century across 304 consecutive months. But when a multi-decadal trend surfaces, is it genuine physical climate change—or a sensor discontinuity between satellite generations?
+      </p>
+      
+      <div class="intro-feature-grid">
+        <div class="intro-feat">
+          <span class="feat-icon">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 20h18M3 20l5-9 4 4 6-11 3 3"/>
+            </svg>
+          </span>
+          <strong>Hamed-Rao &amp; FDR Hardening</strong>
+          <small>Autocorrelation-corrected statistics and false-discovery rate control across 10,368 cells.</small>
+        </div>
+        <div class="intro-feat">
+          <span class="feat-icon">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12"/>
+            </svg>
+          </span>
+          <strong>6 Cross-Dataset Variables</strong>
+          <small>GPM Precipitation, GLDAS Noah Reanalysis (Precip, Soil Moisture, Temp, Evap) &amp; MERRA-2 Aerosols.</small>
+        </div>
+        <div class="intro-feat">
+          <span class="feat-icon">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="1"/>
+              <line x1="12" y1="4" x2="12" y2="20" stroke-dasharray="2 2"/>
+            </svg>
+          </span>
+          <strong>2014 Era Break Diagnostic</strong>
+          <small>Detecting whether trends survive or flip across the historic TRMM-to-GPM sensor transition.</small>
+        </div>
+      </div>
+
+      <div class="intro-action-row">
+        <button class="btn-primary" id="btn-intro-start">
+          <span>Start Investigating</span>
+          <svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+        <button class="btn-ghost" id="btn-intro-tour">
+          <span>Guided Tour (3 Cases)</span>
+        </button>
+      </div>
+
+      <div class="intro-keys-hint">
+        <span>Shortcuts: <strong>G</strong> Toggle Flat/Globe &bull; <strong>&larr; &rarr;</strong> Switch Variable &bull; <strong>Space</strong> Play/Pause &bull; <strong>?</strong> All Shortcuts</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Guided Tour Narrative Card -->
+  <div class="tour-card hidden" id="tour-card">
+    <div class="tour-header">
+      <span class="tour-step-pill" id="tour-step-pill">CASE 1 OF 3</span>
+      <button class="tour-close-btn" id="btn-close-tour" title="Exit Tour (Échap)">&times;</button>
+    </div>
+    <h3 class="tour-title" id="tour-title">Amazon Basin: Genuine Drought or Sensor Discontinuity?</h3>
+    <p class="tour-body" id="tour-body">
+      A massive drying signal of &minus;9.27 mm/month/decade dominates the Amazon. Yet the trend flips from positive under TRMM (+5.38 mm) to deeply negative under GPM (&minus;23.29 mm) across the 2014 transition. Is this a step change in instruments or an intensified real drought?
+    </p>
+    <div class="tour-nav-row">
+      <button class="btn-sm btn-ghost" id="btn-tour-prev">&larr; Previous</button>
+      <div class="tour-dots" id="tour-dots">
+        <span class="tour-dot active"></span>
+        <span class="tour-dot"></span>
+        <span class="tour-dot"></span>
+      </div>
+      <button class="btn-sm btn-primary" id="btn-tour-next">Next Case &rarr;</button>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts Modal -->
+  <div class="modal-overlay hidden" id="modal-shortcuts">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">KEYBOARD SHORTCUTS</h3>
+        <button class="modal-close-btn" id="btn-close-shortcuts">&times;</button>
+      </div>
+      <div class="shortcuts-grid">
+        <div class="shortcut-row"><kbd>G</kbd> <span>Toggle Map Projection (Flat / Globe)</span></div>
+        <div class="shortcut-row"><kbd>P</kbd> <span>Toggle 3D View / Pitch (0° / 45°)</span></div>
+        <div class="shortcut-row"><kbd>&larr;</kbd> <kbd>&rarr;</kbd> <span>Previous / Next Planetary Variable</span></div>
+        <div class="shortcut-row"><kbd>Space</kbd> <span>Play / Pause Monthly Anomaly Scrubber</span></div>
+        <div class="shortcut-row"><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <span>Jump to Case Files (Amazon, Sahel, Tibet)</span></div>
+        <div class="shortcut-row"><kbd>T</kbd> <span>Toggle Guided Story Tour</span></div>
+        <div class="shortcut-row"><kbd>O</kbd> <span>Toggle Opposite Twins Mode</span></div>
+        <div class="shortcut-row"><kbd>S</kbd> <span>Toggle Isolated Speckle Filter</span></div>
+        <div class="shortcut-row"><kbd>Esc</kbd> <span>Close Modals / Exit Tour</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Toast for Resilient Visual Failure Reporting -->
+  <div class="error-toast hidden" id="error-toast">
+    <div class="toast-icon">&excl;</div>
+    <div class="toast-msg" id="toast-msg">Notice: Live Carto tile server unreachable; falling back to offline TopoJSON coastlines.</div>
+    <button class="toast-close" id="btn-toast-close">&times;</button>
+  </div>
+
+  <!-- Mobile Sheet Drag Handle & Toggle -->
+  <button class="mobile-sheet-toggle" id="btn-mobile-sheet">
+    <span class="sheet-handle-bar"></span>
+    <span class="sheet-toggle-text">Inspector &bull; Tap to Expand</span>
+  </button>
+
+  <script src="app.js"></script>
 </body>
 </html>

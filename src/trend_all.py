@@ -157,9 +157,9 @@ def run_trend_for_variable(var_id: str) -> Path:
     ols_p_val_1d = np.array([r[4] for r in raw_results], dtype=np.float32)
     era_flip_1d = np.array([r[5] for r in raw_results], dtype=np.int8)
 
-    # Polar Mask (|lat| <= 60 is valid)
+    # Valid domain: Polar mask (|lat| <= 60) AND finite data (land-mask for GLDAS)
     lat_2d = np.repeat(lats[:, np.newaxis], n_lon, axis=1).flatten()
-    valid_mask_1d = np.where(np.abs(lat_2d) <= 60.0, 1, 0).astype(np.int8)
+    valid_mask_1d = np.where((np.abs(lat_2d) <= 60.0) & np.isfinite(sens_slope_1d), 1, 0).astype(np.int8)
     n_valid = int(valid_mask_1d.sum())
 
     # FDR Control
@@ -170,6 +170,36 @@ def run_trend_for_variable(var_id: str) -> Path:
     sig_plain_1d = np.where((p_val_plain_1d < 0.05) & (valid_mask_1d == 1), 1, 0).astype(np.int8)
     sig_hr_1d = np.where((p_val_hr_1d < 0.05) & (valid_mask_1d == 1), 1, 0).astype(np.int8)
     sig_fdr_1d = np.where((q_vals_1d < 0.05) & (valid_mask_1d == 1), 1, 0).astype(np.int8)
+
+    # Spatial cluster significance: FDR-significant and >= 3 of 8 neighbors have same sign
+    cluster_sig_2d = np.zeros((n_lat, n_lon), dtype=np.int8)
+    slopes_2d = sens_slope_1d.reshape(n_lat, n_lon)
+    valid_2d = valid_mask_1d.reshape(n_lat, n_lon)
+    sig_fdr_2d = sig_fdr_1d.reshape(n_lat, n_lon)
+
+    for i in range(n_lat):
+        for j in range(n_lon):
+            if valid_2d[i, j] == 1 and sig_fdr_2d[i, j] == 1:
+                cell_sign = np.sign(slopes_2d[i, j])
+                if cell_sign == 0 or np.isnan(cell_sign):
+                    continue
+                same_sign_count = 0
+                for di in [-1, 0, 1]:
+                    for dj in [-1, 0, 1]:
+                        if di == 0 and dj == 0:
+                            continue
+                        ni = i + di
+                        nj = (j + dj) % n_lon
+                        if 0 <= ni < n_lat:
+                            if valid_2d[ni, nj] == 1 and np.isfinite(slopes_2d[ni, nj]):
+                                if np.sign(slopes_2d[ni, nj]) == cell_sign:
+                                    same_sign_count += 1
+                if same_sign_count >= 3:
+                    cluster_sig_2d[i, j] = 1
+
+    cluster_sig_1d = cluster_sig_2d.flatten()
+    n_cluster = int(cluster_sig_1d[valid_mask_1d == 1].sum())
+    pct_cluster = (n_cluster / n_valid) * 100 if n_valid > 0 else 0.0
 
     # Sign agreement
     non_zero = (sens_slope_1d != 0) & (ols_slope_1d != 0) & np.isfinite(sens_slope_1d) & np.isfinite(ols_slope_1d) & (valid_mask_1d == 1)
@@ -191,6 +221,7 @@ def run_trend_for_variable(var_id: str) -> Path:
     print(f"    - Plain MK Significant        : {n_pl:,} / {n_valid:,} ({n_pl/n_valid*100:.1f}%)")
     print(f"    - Autocorrelation-Aware (HR)  : {n_hr:,} / {n_valid:,} ({n_hr/n_valid*100:.1f}%)")
     print(f"    - FDR-Corrected (q < 0.05)    : {n_fdr:,} / {n_valid:,} ({n_fdr/n_valid*100:.1f}%)")
+    print(f"    - Cluster-Significant (>=3)   : {n_cluster:,} / {n_valid:,} ({pct_cluster:.1f}%)")
     print(f"    - OLS vs Sen Sign Agreement   : {pct_agree:.1f}%")
     print(f"    - Era Sign Flip (2000-13/14-25): {valid_flips:,} ({pct_flips:.1f}%)")
 
@@ -204,6 +235,7 @@ def run_trend_for_variable(var_id: str) -> Path:
             "q_value": (("lat", "lon"), q_vals_1d.reshape(n_lat, n_lon), {"units": "1"}),
             "valid": (("lat", "lon"), valid_mask_1d.reshape(n_lat, n_lon), {"units": "1"}),
             "significant_fdr": (("lat", "lon"), sig_fdr_1d.reshape(n_lat, n_lon), {"units": "1"}),
+            "cluster_significant": (("lat", "lon"), cluster_sig_2d, {"units": "1", "description": "FDR significant with >=3 neighbors same sign"}),
             "significant_modified": (("lat", "lon"), sig_hr_1d.reshape(n_lat, n_lon), {"units": "1"}),
             "significant_plain": (("lat", "lon"), sig_plain_1d.reshape(n_lat, n_lon), {"units": "1"}),
             "era_sign_flip": (("lat", "lon"), era_flip_1d.reshape(n_lat, n_lon), {"units": "1"}),
@@ -227,9 +259,8 @@ def run_trend_for_variable(var_id: str) -> Path:
     # Backwards compatibility symlink/copy for precip_trend.nc
     if var_id == "gpm_precip":
         compat_file = PROCESSED_DIR / "precip_trend.nc"
-        if not compat_file.exists():
-            import shutil
-            shutil.copy(out_trend_file, compat_file)
+        import shutil
+        shutil.copy(out_trend_file, compat_file)
 
     print(f"[+] Successfully wrote {out_trend_file} ({out_trend_file.stat().st_size / 1024:.1f} KB)")
     return out_trend_file

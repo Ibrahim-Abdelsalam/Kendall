@@ -101,7 +101,7 @@ merra2_aod:
   units: '1'
   dataset_short_name: M2TMNXAER
   version: 5.12.4
-  source_variable: AODANA
+  source_variable: TOTEXTTAU
   source_group: null
   file_format: nc4
   time_range: !!python/tuple
