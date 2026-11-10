@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plot Twist - Global Trend Detector</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Loading screen fade-out animation */
+    #loading-screen {
+      transition: opacity 0.5s ease-out, visibility 0.5s ease-out;
+    }
+    #loading-screen.fade-out {
+      opacity: 0;
+      visibility: hidden;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.05); opacity: 0.4; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .pulse-ring {
+      animation: pulse-ring 2.5s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-center p-6 relative font-sans">
+
+  <!-- ========================================== -->
+  <!-- 1. THE SELF-DELETING LOADING SCREEN OVERLAY -->
+  <!-- ========================================== -->
+  <div id="loading-screen" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/95 backdrop-blur-md">
+    <div class="relative flex items-center justify-center mb-6">
+      <!-- Pulsing radar rings -->
+      <div class="absolute w-28 h-28 rounded-full border border-cyan-500/30 pulse-ring"></div>
+      <div class="absolute w-20 h-20 rounded-full border border-cyan-400/50 pulse-ring" style="animation-delay: -0.8s;"></div>
+      
+      <!-- Center Satellite / Earth Globe Icon -->
+      <div class="w-14 h-14 rounded-full bg-cyan-950/80 border border-cyan-400/80 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+        <svg class="w-7 h-7 text-cyan-400 animate-spin" style="animation-duration: 6s;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <circle cx="12" cy="12" r="10" stroke-width="2" stroke="currentColor" stroke-dasharray="4 4" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 0110 10M12 22a10 10 0 01-10-10" />
+        </svg>
+      </div>
+    </div>
+
+    <!-- Status Messages -->
+    <h2 id="loading-title" class="text-lg font-semibold tracking-wide text-white mb-1">
+      Plot Twist
+    </h2>
+    <p id="loading-status" class="text-xs text-cyan-300 font-mono mb-4">
+      Loading Earth Science Precipitation Pipeline...
+    </p>
+
+    <!-- Progress Bar -->
+    <div class="w-64 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700/60">
+      <div id="loading-progress" class="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-300 w-0"></div>
+    </div>
+    <span id="loading-percentage" class="text-[11px] font-mono text-slate-400 mt-2">0%</span>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- 2. MAIN WEBSITE CONTENT (Appears after delete) -->
+  <!-- ========================================== -->
+  <main class="max-w-2xl w-full text-center space-y-6">
+    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-800/60 text-cyan-400 text-xs font-mono">
+      <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+      NASA Hackathon Challenge: Plot Twist
+    </div>
+    
+    <h1 class="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+      Earth Science Variable Trends
+    </h1>
+    
+    <p class="text-slate-400 text-sm max-w-lg mx-auto">
+      Pin any point on the globe to inspect non-parametric Mann-Kendall precipitation trends and Sen’s slope anomalies (2000–2025).
+    </p>
+
+    <div class="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl space-y-4">
+      <div class="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800 pb-3">
+        <span>Loading Screen State:</span>
+        <span class="text-emerald-400 font-mono font-medium">Deleted from DOM</span>
+      </div>
+      <p class="text-xs text-slate-400">
+        You can re-trigger a simulated loading screen to test the lifecycle again:
+      </p>
+      <button onclick="recreateLoadingScreen()" class="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs transition shadow-md shadow-cyan-600/20">
+        Re-test Loading Screen
+      </button>
+    </div>
+  </main>
+
+  <!-- ========================================== -->
+  <!-- 3. LIFECYCLE CONTROLLER (Deletes upon finish) -->
+  <!-- ========================================== -->
+  <script>
+    function startLoadingSequence(elementId = 'loading-screen') {
+      const loader = document.getElementById(elementId);
+      const progressBar = document.getElementById('loading-progress');
+      const statusText = document.getElementById('loading-status');
+      const percentageText = document.getElementById('loading-percentage');
+
+      if (!loader) return;
+
+      const steps = [
+        { progress: 25, text: "Authenticating Earthdata connection..." },
+        { progress: 55, text: "Fetching GPM IMERG V07 anomalies..." },
+        { progress: 85, text: "Applying 2.5° conservative grid weights..." },
+        { progress: 100, text: "Ready!" }
+      ];
+
+      let stepIdx = 0;
+      const interval = setInterval(() => {
+        if (stepIdx < steps.length) {
+          const step = steps[stepIdx];
+          progressBar.style.width = step.progress + '%';
+          percentageText.textContent = step.progress + '%';
+          statusText.textContent = step.text;
+          stepIdx++;
+        } else {
+          clearInterval(interval);
+          finishAndRemoveLoadingScreen(loader);
+        }
+      }, 400);
+    }
+
+    /**
+     * Fades out and completely deletes the loading screen element from the DOM.
+     */
+    function finishAndRemoveLoadingScreen(loaderElement) {
+      if (!loaderElement) return;
+
+      // 1. Trigger CSS fade-out transition
+      loaderElement.classList.add('fade-out');
+
+      // 2. Remove completely from the DOM when the transition completes
+      loaderElement.addEventListener('transitionend', () => {
+        if (loaderElement.parentNode) {
+          loaderElement.remove();
+          console.log("[Plot Twist] Loading screen finished and removed from DOM.");
+        }
+      }, { once: true });
+
+      // Fallback safeguard in case transitionend is canceled/skipped
+      setTimeout(() => {
+        if (loaderElement.parentNode) {
+          loaderElement.remove();
+        }
+      }, 600);
+    }
+
+    // Auto-start on initial page load
+    window.addEventListener('DOMContentLoaded', () => {
+      startLoadingSequence('loading-screen');
+    });
+
+    // Helper to test multiple times
+    function recreateLoadingScreen() {
+      if (document.getElementById('loading-screen')) return;
+
+      const div = document.createElement('div');
+      div.id = 'loading-screen';
+      div.className = 'fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/95 backdrop-blur-md';
+      div.innerHTML = `
+        <div class="relative flex items-center justify-center mb-6">
+          <div class="absolute w-28 h-28 rounded-full border border-cyan-500/30 pulse-ring"></div>
+          <div class="absolute w-20 h-20 rounded-full border border-cyan-400/50 pulse-ring" style="animation-delay: -0.8s;"></div>
+          <div class="w-14 h-14 rounded-full bg-cyan-950/80 border border-cyan-400/80 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+            <svg class="w-7 h-7 text-cyan-400 animate-spin" style="animation-duration: 6s;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <circle cx="12" cy="12" r="10" stroke-width="2" stroke="currentColor" stroke-dasharray="4 4" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 0110 10M12 22a10 10 0 01-10-10" />
+            </svg>
+          </div>
+        </div>
+        <h2 id="loading-title" class="text-lg font-semibold tracking-wide text-white mb-1">Plot Twist</h2>
+        <p id="loading-status" class="text-xs text-cyan-300 font-mono mb-4">Reloading dataset...</p>
+        <div class="w-64 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700/60">
+          <div id="loading-progress" class="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-300 w-0"></div>
+        </div>
+        <span id="loading-percentage" class="text-[11px] font-mono text-slate-400 mt-2">0%</span>
+      `;
+      document.body.appendChild(div);
+      startLoadingSequence('loading-screen');
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+# Data files (never commit raw or processed datasets)
+data/
+
+# Python & Environment
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+.netrc
+.DS_Store
+
+# Jupyter / IDEs
+.ipynb_checkpoints/
+.vscode/
+.idea/
