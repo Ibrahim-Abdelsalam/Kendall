@@ -27,26 +27,33 @@ def run_tests():
         print("\n1. Loading Web Application...")
         page.goto("http://localhost:8000/index.html")
         page.wait_for_selector("#map")
-        page.wait_for_timeout(2000)
+        page.wait_for_function("() => window.appState && window.appState.map", timeout=15000)
+        page.wait_for_timeout(500)
         
         # Dismiss intro overlay so map controls are accessible
+        page.click("#btn-intro-start")
         page.evaluate("""() => {
             const intro = document.getElementById('intro-overlay');
-            if (intro) intro.classList.add('hidden');
+            if (intro) {
+                intro.classList.add('hidden');
+                intro.style.display = 'none';
+                intro.style.pointerEvents = 'none';
+            }
             if (window.appState) window.appState.isSpinningIntro = false;
         }""")
         page.wait_for_timeout(500)
         
         # Check initial state
         state_info = page.evaluate("""() => {
+            const m = window.appState ? window.appState.map : null;
             return {
-                ready: !!window.appState && !!window.appState.map,
+                ready: !!m,
                 proj: window.appState ? window.appState.projection : null,
-                zoom: window.appState ? window.appState.map.getZoom() : null,
-                pitch: window.appState ? window.appState.map.getPitch() : null,
-                bearing: window.appState ? window.appState.map.getBearing() : null,
-                touchPitchEnabled: window.appState ? window.appState.map.touchPitch.isEnabled() : null,
-                touchZoomRotateEnabled: window.appState ? window.appState.map.touchZoomRotate.isEnabled() : null,
+                zoom: m ? m.getZoom() : null,
+                pitch: m ? m.getPitch() : null,
+                bearing: m ? m.getBearing() : null,
+                touchPitchEnabled: m ? m.touchPitch.isEnabled() : null,
+                touchZoomRotateEnabled: m ? m.touchZoomRotate.isEnabled() : null,
             };
         }""")
         print("Initial Map State:", state_info)

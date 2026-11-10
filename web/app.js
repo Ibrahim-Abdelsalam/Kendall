@@ -1836,7 +1836,7 @@
     const option = {
       backgroundColor: 'transparent',
       animation: true,
-      grid: { left: 45, right: 15, top: 15, bottom: 22 },
+      grid: { left: 48, right: 15, top: 15, bottom: 22 },
       tooltip: {
         trigger: 'axis',
         backgroundColor: 'rgba(7, 14, 28, 0.96)',
@@ -1885,6 +1885,8 @@
     if (!state.charts.timeseries || !state.chartDates || !state.chartDates[m]) return;
     const dateStr = state.chartDates[m];
     const curVal = state.chartSeries && state.chartSeries[m] != null ? state.chartSeries[m] : null;
+    const n = state.chartDates.length;
+    const isLeftHalf = m < n / 2;
 
     state.charts.timeseries.setOption({
       series: [
@@ -1897,15 +1899,19 @@
             label: {
               show: true,
               position: 'insideEndTop',
+              rotate: 0,
+              align: isLeftHalf ? 'left' : 'right',
+              verticalAlign: 'top',
+              offset: isLeftHalf ? [6, 4] : [-6, 4],
               formatter: () => dateStr,
               color: '#22D3EE',
               fontSize: 9,
               fontFamily: 'IBM Plex Mono, monospace',
-              backgroundColor: 'rgba(7, 14, 28, 0.92)',
-              borderColor: 'rgba(34, 211, 238, 0.45)',
+              backgroundColor: 'rgba(7, 14, 28, 0.95)',
+              borderColor: 'rgba(34, 211, 238, 0.6)',
               borderWidth: 1,
               borderRadius: 2,
-              padding: [2, 4],
+              padding: [2, 5],
             },
             lineStyle: {
               color: '#22D3EE',
@@ -2429,7 +2435,7 @@
     const lineupEl = document.getElementById('lineup-table');
     if (!lineupEl) return;
 
-    const isMonthly = state.lineupMode === 'monthly' || state.viewMode === 'monthly';
+    const isMonthly = state.lineupMode === 'monthly';
     const subLabel = document.getElementById('lineup-sub-label');
     const btnMonthly = document.getElementById('btn-lineup-monthly');
     const btnTrend = document.getElementById('btn-lineup-trend');
@@ -2449,11 +2455,20 @@
     if (subLabel) {
       subLabel.textContent = isMonthly
         ? `Anomaly in ${dateStr} at Pinned Coordinates`
-        : 'Ranked by normalized trend strength (|slope/yr| / σ)';
+        : '25-Year Trend Rate (Sen\'s slope / decade) at Pinned Coordinates';
     }
 
     const cellFlatIdx = latIdx * N_LONS + lonIdx;
     const rankings = [];
+
+    // Background prefetch uncached variables so all 12 lineup rows populate
+    VARIABLES_LIST.forEach((v) => {
+      if (!state.cache[v.id]) {
+        loadVariable(v.id).then(() => {
+          if (state.cellIndex) updatePlanetaryLineup(state.cellIndex.latIdx, state.cellIndex.lonIdx, state.currentMonthIdx);
+        }).catch(() => {});
+      }
+    });
 
     VARIABLES_LIST.forEach((v) => {
       const data = state.cache[v.id];
@@ -2480,7 +2495,7 @@
           return;
         }
         const val = rawInt * scale + offset;
-        const normScale = v.id.includes('temp')
+        const normScale = v.id.includes('temp') || v.id.includes('ts')
           ? 2.5
           : v.id.includes('precip')
           ? 40.0
@@ -2488,6 +2503,10 @@
           ? 20.0
           : v.id.includes('aod')
           ? 0.15
+          : v.id.includes('swe')
+          ? 10.0
+          : v.id.includes('wind')
+          ? 2.0
           : 25.0;
         const strength = Math.min(1.0, Math.abs(val) / normScale);
         const unit = (v.unit || '').replace('/dec', '');
@@ -2505,11 +2524,25 @@
           return;
         }
         const slope = raw * (data.trend.slope_scale || 1.0);
-        const absNorm = Math.min(1.0, Math.abs(slope) / 5.0);
+        const normSlope = v.id.includes('temp') || v.id.includes('ts')
+          ? 0.5
+          : v.id.includes('precip')
+          ? 6.0
+          : v.id.includes('soil')
+          ? 3.0
+          : v.id.includes('aod')
+          ? 0.03
+          : v.id.includes('swe')
+          ? 2.0
+          : v.id.includes('wind')
+          ? 0.5
+          : 5.0;
+        const absNorm = Math.min(1.0, Math.abs(slope) / normSlope);
+        const unit = (v.unit || '').replace('/decade', '/dec');
         rankings.push({
           ...v,
           strength: absNorm,
-          text: (slope > 0 ? '+' : '') + slope.toFixed(2),
+          text: (slope > 0 ? '+' : '') + slope.toFixed(2) + (unit ? ' ' + unit : ''),
           isMasked: false,
           isPositive: slope >= 0,
         });
@@ -2522,6 +2555,9 @@
     rankings.forEach((r, idx) => {
       const row = document.createElement('div');
       row.className = 'lineup-row';
+      row.style.cursor = 'pointer';
+      row.title = `Click to switch view to ${r.name}`;
+      row.addEventListener('click', () => switchVariable(r.id));
       const barColor = r.isMasked ? 'transparent' : (r.isPositive ? 'var(--cyan-accent)' : 'var(--orange-accent)');
       row.innerHTML = `
         <span class="lineup-rank">#${idx + 1}</span>
@@ -3016,16 +3052,17 @@
           return;
         }
         pointerDownTime = performance.now();
-        maxTouchesInGesture = Math.max(maxTouchesInGesture, e.touches ? e.touches.length : 1);
-        maxPointerDist = 0;
-        if (e.touches && e.touches.length === 1) {
+        const currentTouchCount = e.touches ? e.touches.length : 1;
+        if (currentTouchCount === 1) {
+          maxTouchesInGesture = 1;
           pointerDownPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
           isGestureActive = false;
         } else {
-          // Multitouch gesture immediately flags active gesture
+          maxTouchesInGesture = Math.max(maxTouchesInGesture, currentTouchCount);
           pointerDownPos = null;
           isGestureActive = true;
         }
+        maxPointerDist = 0;
       });
 
       state.map.on('mousemove', (e) => {
@@ -3321,6 +3358,7 @@
     if (btnViewTrend && btnViewMonthly) {
       btnViewTrend.addEventListener('click', () => {
         state.viewMode = 'trend';
+        state.lineupMode = 'trend';
         btnViewTrend.classList.add('active');
         btnViewMonthly.classList.remove('active');
         const varData = state.cache[state.currentVarId];
@@ -3330,6 +3368,7 @@
 
       btnViewMonthly.addEventListener('click', () => {
         state.viewMode = 'monthly';
+        state.lineupMode = 'monthly';
         btnViewMonthly.classList.add('active');
         btnViewTrend.classList.remove('active');
         const varData = state.cache[state.currentVarId];

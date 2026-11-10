@@ -26,7 +26,7 @@ def run_tests():
         
         print("\n1. Loading Web Application at http://localhost:8000/index.html...")
         page.goto("http://localhost:8000/index.html")
-        page.wait_for_function("() => window.plotTwist && window.plotTwist.state")
+        page.wait_for_function("() => window.plotTwist && window.plotTwist.state && window.plotTwist.state.map")
         page.wait_for_timeout(500)
         
         # Dismiss intro screen

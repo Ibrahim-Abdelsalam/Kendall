@@ -1550,6 +1550,10 @@ button, input, select {
   gap: var(--space-3);
 }
 
+.panel-right > * {
+  flex-shrink: 0;
+}
+
 .inspector-location-header {
   display: flex;
   flex-direction: column;
@@ -1587,6 +1591,7 @@ button, input, select {
    Real-Time Monthly Observation Card (Dynamic Month-to-Month Telemetry)
    ========================================================================== */
 .obs-telemetry-card {
+  flex-shrink: 0;
   padding: var(--space-3);
   border-radius: var(--radius-card);
   background: var(--bg-card);
