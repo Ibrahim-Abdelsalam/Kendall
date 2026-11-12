@@ -2810,57 +2810,562 @@
     }
   }
 
-  // --- Guided Tour Engine ---
+  // --- Guided Tour Engine (Narrated Audio, Dynamic Highlighting & Statistical Tour) ---
+  const CASE_TOUR_IDS = ['case_amazon', 'case_sahel', 'case_tibet', 'case_canada'];
+  const tourAudio = new Audio();
+  tourAudio.preload = 'auto';
+
+  function showTourWelcomeToast(msg = "Welcome to Kendall! Guided tour initiated.") {
+    const toast = document.getElementById('tour-welcome-toast');
+    const text = document.getElementById('tour-welcome-toast-text');
+    if (!toast || !text) return;
+    text.textContent = msg;
+    toast.classList.remove('hidden');
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+      toast.classList.add('hidden');
+    }, 4000);
+  }
+
+  function showTourCompleteModal() {
+    const modal = document.getElementById('modal-tour-complete');
+    if (modal) modal.classList.remove('hidden');
+  }
+
+  const tourEngine = {
+    toursData: null,
+    audioManifest: null,
+    activeTour: null,
+    activeTourId: null,
+    currentStepIndex: -1,
+    isPlaying: false,
+    isMuted: false,
+    playbackSpeed: 1.0,
+    captionsVisible: true,
+    isPausedForMapMove: false,
+    stepTimer: null,
+    currentHighlightTarget: null,
+    currentHighlightStyle: 'ring',
+
+    async loadData() {
+      if (!this.toursData) {
+        try {
+          const res = await fetch('tour/tours.json');
+          this.toursData = await res.json();
+        } catch (e) {
+          console.warn('Failed to load tour/tours.json:', e);
+        }
+      }
+      if (!this.audioManifest) {
+        try {
+          const res = await fetch('tour/audio/manifest.json');
+          this.audioManifest = await res.json();
+        } catch (e) {
+          console.warn('Failed to load tour/audio/manifest.json:', e);
+        }
+      }
+    },
+
+    async startTour(tourId, startIdx = 0) {
+      await this.loadData();
+      if (!this.toursData || !this.toursData[tourId]) {
+        console.warn(`Tour '${tourId}' not found in tours.json.`);
+        return;
+      }
+
+      state.isSpinningIntro = false;
+      const intro = document.getElementById('intro-overlay');
+      if (intro) {
+        intro.style.pointerEvents = 'none';
+        intro.classList.add('hidden');
+      }
+
+      document.getElementById('modal-first-visit')?.classList.add('hidden');
+      try {
+        localStorage.setItem('kendall_first_visit_tour_dismissed', 'true');
+      } catch (e) {}
+
+      this.activeTourId = tourId;
+      this.activeTour = this.toursData[tourId];
+      this.currentStepIndex = startIdx;
+      this.isPlaying = true;
+      this.isPausedForMapMove = false;
+
+      document.getElementById('tour-controller')?.classList.remove('hidden');
+      document.getElementById('tour-highlight-overlay')?.classList.remove('hidden');
+      document.getElementById('tour-resume-chip')?.classList.add('hidden');
+
+      this.renderDots();
+      showTourWelcomeToast("Welcome to Kendall! Guided tour initiated.");
+      await this.goToStep(startIdx);
+    },
+
+    stopTour(completed = false) {
+      this.isPlaying = false;
+      this.activeTour = null;
+      this.activeTourId = null;
+      this.currentStepIndex = -1;
+      this.isPausedForMapMove = false;
+      this.currentHighlightTarget = null;
+
+      tourAudio.pause();
+      if (this.stepTimer) clearTimeout(this.stepTimer);
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
+      document.getElementById('tour-controller')?.classList.add('hidden');
+      document.getElementById('tour-highlight-overlay')?.classList.add('hidden');
+      document.getElementById('tour-resume-chip')?.classList.add('hidden');
+      document.getElementById('tour-autoplay-prompt')?.classList.add('hidden');
+      document.getElementById('tour-welcome-toast')?.classList.add('hidden');
+      document.getElementById('tour-card')?.classList.add('hidden');
+      document.getElementById('btn-tour-ctrl-next')?.classList.remove('pulse-hint');
+      const actionsEl = document.getElementById('tour-step-actions');
+      if (actionsEl) {
+        actionsEl.innerHTML = '';
+        actionsEl.classList.add('hidden');
+      }
+
+      if (completed) {
+        showTourCompleteModal();
+      }
+    },
+
+    renderDots() {
+      const container = document.getElementById('tour-ctrl-dots');
+      if (!container || !this.activeTour) return;
+      container.innerHTML = '';
+      const steps = this.activeTour.steps;
+      steps.forEach((s, idx) => {
+        const dot = document.createElement('span');
+        dot.className = 'tour-ctrl-dot' + (idx === this.currentStepIndex ? ' active' : '');
+        dot.title = `Step ${idx + 1}: ${s.title}`;
+        dot.addEventListener('click', () => {
+          this.goToStep(idx);
+        });
+        container.appendChild(dot);
+      });
+    },
+
+    async goToStep(idx) {
+      if (!this.activeTour) return;
+      const steps = this.activeTour.steps;
+      if (idx < 0 || idx >= steps.length) {
+        this.stopTour();
+        return;
+      }
+
+      resetAnalysisCounter();
+      this.currentStepIndex = idx;
+      const step = steps[idx];
+
+      if (this.stepTimer) clearTimeout(this.stepTimer);
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
+      const badgeEl = document.getElementById('tour-ctrl-badge');
+      const titleEl = document.getElementById('tour-ctrl-title');
+      const captionEl = document.getElementById('tour-captions-text');
+      const noteEl = document.getElementById('tour-captions-note');
+
+      if (badgeEl) badgeEl.textContent = `STEP ${idx + 1} OF ${steps.length}`;
+      if (titleEl) titleEl.textContent = step.title;
+      if (captionEl) captionEl.textContent = step.text;
+      if (noteEl) noteEl.classList.add('hidden');
+
+      const actionsEl = document.getElementById('tour-step-actions');
+      const nextBtn = document.getElementById('btn-tour-ctrl-next');
+      const isManualStep = step.autoAdvance === false || step.id === 'site_01_welcome' || (this.activeTourId === 'site_tour' && idx === 0);
+
+      if (actionsEl) {
+        if (isManualStep) {
+          actionsEl.innerHTML = `
+            <button class="tour-proceed-btn" id="btn-tour-step-proceed" title="Click to begin exploring parameters">
+              <span>Next: Explore Parameters</span>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          `;
+          actionsEl.classList.remove('hidden');
+          const proceedBtn = document.getElementById('btn-tour-step-proceed');
+          if (proceedBtn) {
+            proceedBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              tourEngine.advanceStep(1);
+            });
+          }
+          if (nextBtn) nextBtn.classList.add('pulse-hint');
+        } else {
+          actionsEl.innerHTML = '';
+          actionsEl.classList.add('hidden');
+          if (nextBtn) nextBtn.classList.remove('pulse-hint');
+        }
+      }
+
+      const dots = document.querySelectorAll('.tour-ctrl-dot');
+      dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+
+      this.updatePlayPauseIcon(true);
+
+      // Perform actions
+      const act = step.action || {};
+      if (act.setProjection && act.setProjection !== state.projection) {
+        setProjection(act.setProjection);
+      }
+      if (act.setMode && act.setMode !== state.selectionMode) {
+        setSelectionMode(act.setMode);
+      }
+      if (act.setSeason) {
+        handleSeasonPreset(act.setSeason);
+      }
+      if (act.setPeriod) {
+        setPeriodRange(act.setPeriod[0], act.setPeriod[1]);
+      }
+      if (act.setVar && act.setVar !== state.currentVarId) {
+        await switchVariable(act.setVar);
+      }
+
+      if (act.flyTo && state.map) {
+        state.isTourFlying = true;
+        const snap = snapCoordsToGrid(act.flyTo.lat, act.flyTo.lon);
+        state.cellIndex = snap;
+        state.currentPin = { lat: snap.snappedLat, lon: snap.snappedLon };
+        dropPinMarker(snap.snappedLat, snap.snappedLon);
+        updateInspector(snap.latIdx, snap.lonIdx);
+
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        state.map.flyTo({
+          center: [act.flyTo.lon, act.flyTo.lat],
+          zoom: act.flyTo.zoom || 3.5,
+          pitch: act.flyTo.pitch || 0,
+          duration: prefersReducedMotion ? 0 : 1800,
+          essential: true,
+        });
+
+        setTimeout(() => {
+          state.isTourFlying = false;
+          tourEngine.updateHighlight();
+        }, prefersReducedMotion ? 50 : 1900);
+      }
+
+      if (typeof step.target === 'string') {
+        const targetEl = document.querySelector(step.target);
+        if (targetEl) {
+          const scrollParent = targetEl.closest('.panel-right, .panel-left');
+          if (scrollParent) {
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }
+      }
+
+      this.currentHighlightTarget = step.target;
+      this.currentHighlightStyle = step.highlightStyle || 'ring';
+      this.updateHighlight();
+
+      this.playAudio(step);
+      resetAnalysisCounter();
+    },
+
+    updateHighlight() {
+      if (!this.activeTour || !this.currentHighlightTarget) {
+        const overlay = document.getElementById('tour-highlight-overlay');
+        if (overlay) overlay.classList.add('hidden');
+        return;
+      }
+
+      const overlay = document.getElementById('tour-highlight-overlay');
+      const cutoutRect = document.getElementById('tour-cutout-rect');
+      const cutoutCircle = document.getElementById('tour-cutout-circle');
+      const ring = document.getElementById('tour-target-ring');
+      const arrow = document.getElementById('tour-target-arrow');
+      const controller = document.getElementById('tour-controller');
+
+      if (!overlay || !cutoutRect || !cutoutCircle || !ring) return;
+
+      overlay.classList.remove('hidden');
+
+      let x = 0, y = 0, w = 0, h = 0, isCircle = false, radius = 0;
+
+      if (typeof this.currentHighlightTarget === 'object' && this.currentHighlightTarget.type === 'map_coord') {
+        if (state.map) {
+          const pt = state.map.project([this.currentHighlightTarget.lng, this.currentHighlightTarget.lat]);
+          x = pt.x;
+          y = pt.y;
+          radius = 42;
+          isCircle = true;
+        }
+      } else if (typeof this.currentHighlightTarget === 'string') {
+        const el = document.querySelector(this.currentHighlightTarget);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          const pad = 6;
+          x = rect.left - pad;
+          y = rect.top - pad;
+          w = rect.width + pad * 2;
+          h = rect.height + pad * 2;
+          isCircle = false;
+        } else {
+          x = window.innerWidth / 2;
+          y = window.innerHeight / 2;
+          radius = 120;
+          isCircle = true;
+        }
+      }
+
+      if (isCircle) {
+        cutoutRect.setAttribute('width', '0');
+        cutoutRect.setAttribute('height', '0');
+        cutoutCircle.setAttribute('cx', String(x));
+        cutoutCircle.setAttribute('cy', String(y));
+        cutoutCircle.setAttribute('r', String(radius));
+
+        ring.classList.remove('hidden');
+        ring.style.left = `${x - radius}px`;
+        ring.style.top = `${y - radius}px`;
+        ring.style.width = `${radius * 2}px`;
+        ring.style.height = `${radius * 2}px`;
+        ring.style.borderRadius = '50%';
+      } else {
+        cutoutCircle.setAttribute('r', '0');
+        cutoutRect.setAttribute('x', String(x));
+        cutoutRect.setAttribute('y', String(y));
+        cutoutRect.setAttribute('width', String(w));
+        cutoutRect.setAttribute('height', String(h));
+        cutoutRect.setAttribute('rx', '6');
+
+        ring.classList.remove('hidden');
+        ring.style.left = `${x}px`;
+        ring.style.top = `${y}px`;
+        ring.style.width = `${w}px`;
+        ring.style.height = `${h}px`;
+        ring.style.borderRadius = '6px';
+      }
+
+      const targetMidX = isCircle ? x : x + w / 2;
+      const targetTop = isCircle ? y - radius : y;
+      const targetBottom = isCircle ? y + radius : y + h;
+
+      if (this.currentHighlightStyle === 'arrow' && arrow) {
+        arrow.classList.remove('hidden');
+        if (targetTop >= 45) {
+          arrow.style.left = `${Math.max(10, Math.min(window.innerWidth - 42, targetMidX - 16))}px`;
+          arrow.style.top = `${targetTop - 36}px`;
+          arrow.style.setProperty('--arrow-rot', '0deg');
+        } else {
+          arrow.style.left = `${Math.max(10, Math.min(window.innerWidth - 42, targetMidX - 16))}px`;
+          arrow.style.top = `${targetBottom + 8}px`;
+          arrow.style.setProperty('--arrow-rot', '180deg');
+        }
+      } else if (arrow) {
+        arrow.classList.add('hidden');
+      }
+
+      // Mobile controller positioning: never cover target!
+      if (window.innerWidth <= 820 && controller) {
+        const targetMidY = isCircle ? y : y + h / 2;
+        if (targetMidY > window.innerHeight * 0.45) {
+          controller.classList.add('top-docked');
+        } else {
+          controller.classList.remove('top-docked');
+        }
+      }
+    },
+
+    playAudio(step) {
+      if (!this.isPlaying) return;
+
+      const manifestItem = this.audioManifest ? this.audioManifest[step.id] : null;
+      const durSec = manifestItem ? manifestItem.duration : (step.durationFallbackMs / 1000.0);
+      const durationMs = durSec * 1000;
+
+      const isAutoAdvance = step.autoAdvance !== false && step.id !== 'site_01_welcome' && !(this.activeTourId === 'site_tour' && this.currentStepIndex === 0);
+
+      tourAudio.pause();
+      tourAudio.src = `tour/${step.audio}`;
+      tourAudio.playbackRate = this.playbackSpeed;
+      tourAudio.muted = this.isMuted;
+
+      let hasEnded = false;
+
+      tourAudio.onended = () => {
+        hasEnded = true;
+        if (isAutoAdvance && this.isPlaying) {
+          this.stepTimer = setTimeout(() => {
+            this.advanceStep(1);
+          }, 400);
+        } else {
+          this.isPlaying = false;
+          this.updatePlayPauseIcon(false);
+        }
+      };
+
+      tourAudio.onerror = () => {
+        console.warn(`Tour audio '${step.audio}' failed to load; trying speech synthesis fallback.`);
+        if ('speechSynthesis' in window) {
+          const noteEl = document.getElementById('tour-captions-note');
+          if (noteEl) {
+            noteEl.textContent = '[Browser voice fallback]';
+            noteEl.classList.remove('hidden');
+          }
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(step.text);
+          utterance.rate = this.playbackSpeed;
+          utterance.onend = () => {
+            if (isAutoAdvance && this.isPlaying) {
+              this.advanceStep(1);
+            } else {
+              this.isPlaying = false;
+              this.updatePlayPauseIcon(false);
+            }
+          };
+          utterance.onerror = () => {
+            if (isAutoAdvance && this.isPlaying) {
+              this.advanceStep(1);
+            } else {
+              this.isPlaying = false;
+              this.updatePlayPauseIcon(false);
+            }
+          };
+          window.speechSynthesis.speak(utterance);
+        } else {
+          if (isAutoAdvance) {
+            this.stepTimer = setTimeout(() => {
+              if (this.isPlaying) this.advanceStep(1);
+            }, durationMs / this.playbackSpeed);
+          } else {
+            this.isPlaying = false;
+            this.updatePlayPauseIcon(false);
+          }
+        }
+      };
+
+      const playPromise = tourAudio.play();
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          document.getElementById('tour-autoplay-prompt')?.classList.add('hidden');
+        }).catch((err) => {
+          console.warn('Autoplay prevented tour audio:', err);
+          document.getElementById('tour-autoplay-prompt')?.classList.remove('hidden');
+          if (isAutoAdvance) {
+            this.stepTimer = setTimeout(() => {
+              if (this.isPlaying && !hasEnded) {
+                this.advanceStep(1);
+              }
+            }, durationMs / this.playbackSpeed);
+          }
+        });
+      }
+    },
+
+    advanceStep(delta) {
+      if (!this.activeTour) return;
+      const nextIdx = this.currentStepIndex + delta;
+      if (nextIdx >= this.activeTour.steps.length) {
+        this.stopTour(true);
+      } else if (nextIdx < 0) {
+        this.goToStep(0);
+      } else {
+        this.goToStep(nextIdx);
+      }
+    },
+
+    togglePlayPause() {
+      if (!this.activeTour) return;
+      if (this.isPlaying) {
+        this.isPlaying = false;
+        tourAudio.pause();
+        if (this.stepTimer) clearTimeout(this.stepTimer);
+        if ('speechSynthesis' in window) window.speechSynthesis.pause();
+        this.updatePlayPauseIcon(false);
+      } else {
+        this.isPlaying = true;
+        this.isPausedForMapMove = false;
+        document.getElementById('tour-resume-chip')?.classList.add('hidden');
+        this.updatePlayPauseIcon(true);
+        if (tourAudio.paused && tourAudio.currentTime < tourAudio.duration) {
+          tourAudio.play().catch(() => {});
+        } else {
+          const step = this.activeTour.steps[this.currentStepIndex];
+          this.playAudio(step);
+        }
+      }
+    },
+
+    updatePlayPauseIcon(playing) {
+      const iconPlay = document.querySelector('#btn-tour-ctrl-play-pause .icon-play');
+      const iconPause = document.querySelector('#btn-tour-ctrl-play-pause .icon-pause');
+      if (iconPlay && iconPause) {
+        if (playing) {
+          iconPlay.classList.add('hidden');
+          iconPause.classList.remove('hidden');
+        } else {
+          iconPlay.classList.remove('hidden');
+          iconPause.classList.add('hidden');
+        }
+      }
+    },
+
+    pauseForManualInteraction() {
+      if (!this.activeTour || !this.isPlaying) return;
+      this.isPlaying = false;
+      this.isPausedForMapMove = true;
+      tourAudio.pause();
+      if (this.stepTimer) clearTimeout(this.stepTimer);
+      if ('speechSynthesis' in window) window.speechSynthesis.pause();
+      this.updatePlayPauseIcon(false);
+
+      const resumeChip = document.getElementById('tour-resume-chip');
+      if (resumeChip) resumeChip.classList.remove('hidden');
+    },
+
+    resumeFromManualInteraction() {
+      const resumeChip = document.getElementById('tour-resume-chip');
+      if (resumeChip) resumeChip.classList.add('hidden');
+      this.isPausedForMapMove = false;
+      this.togglePlayPause();
+    },
+
+    setSpeed(speed) {
+      this.playbackSpeed = speed;
+      tourAudio.playbackRate = speed;
+      const btn = document.getElementById('btn-tour-speed');
+      if (btn) btn.textContent = `${speed}×`;
+      const opts = document.querySelectorAll('.tour-speed-dropdown .speed-opt');
+      opts.forEach((o) => o.classList.toggle('active', parseFloat(o.dataset.speed) === speed));
+      document.getElementById('tour-speed-dropdown')?.classList.add('hidden');
+    },
+
+    toggleMute() {
+      this.isMuted = !this.isMuted;
+      tourAudio.muted = this.isMuted;
+      const unmutedIcon = document.querySelector('#btn-tour-ctrl-mute .icon-unmuted');
+      const mutedIcon = document.querySelector('#btn-tour-ctrl-mute .icon-muted');
+      if (unmutedIcon && mutedIcon) {
+        unmutedIcon.classList.toggle('hidden', this.isMuted);
+        mutedIcon.classList.toggle('hidden', !this.isMuted);
+      }
+    },
+
+    toggleCaptions() {
+      this.captionsVisible = !this.captionsVisible;
+      const captionsBox = document.getElementById('tour-captions-box');
+      const btnCaptions = document.getElementById('btn-tour-ctrl-captions');
+      if (captionsBox) captionsBox.classList.toggle('hidden', !this.captionsVisible);
+      if (btnCaptions) btnCaptions.classList.toggle('active', this.captionsVisible);
+    },
+  };
+
   async function launchTourStep(idx) {
-    state.isTourInitializing = true;
-    resetAnalysisCounter();
-    state.tourIndex = idx;
+    const tourId = CASE_TOUR_IDS[idx] || 'case_amazon';
     const step = TOUR_CASES[idx];
-    const tourCard = document.getElementById('tour-card');
     const stepPill = document.getElementById('tour-step-pill');
     const titleEl = document.getElementById('tour-title');
     const bodyEl = document.getElementById('tour-body');
     const dots = document.querySelectorAll('.tour-dot');
 
-    if (stepPill) stepPill.textContent = step.caseNum;
-    if (titleEl) titleEl.textContent = step.title;
-    if (bodyEl) bodyEl.textContent = step.body;
-
+    if (stepPill && step) stepPill.textContent = step.caseNum;
+    if (titleEl && step) titleEl.textContent = step.title;
+    if (bodyEl && step) bodyEl.textContent = step.body;
     dots.forEach((d, i) => d.classList.toggle('active', i === idx));
 
-    tourCard.classList.remove('hidden');
-    gsap.fromTo(tourCard, { opacity: 0, y: 15 }, { opacity: 1, y: 0, duration: 0.4, ease: 'power2.out' });
-
-    if (step.season) {
-      handleSeasonPreset(step.season);
-    } else {
-      handleSeasonPreset('ALL');
-    }
-
-    if (state.selectionMode !== 'point') {
-      setSelectionMode('point');
-    }
-
-    await switchVariable(step.varId);
-    const snap = snapCoordsToGrid(step.lat, step.lon);
-    state.cellIndex = snap;
-    state.currentPin = { lat: snap.snappedLat, lon: snap.snappedLon };
-
-    dropPinMarker(snap.snappedLat, snap.snappedLon);
-    updateInspector(snap.latIdx, snap.lonIdx);
-
-    if (state.map) {
-      state.map.flyTo({
-        center: [snap.snappedLon, snap.snappedLat],
-        zoom: 3.5,
-        pitch: 25,
-        duration: 2000,
-        essential: true,
-      });
-    }
-
-    state.isTourInitializing = false;
-    resetAnalysisCounter();
+    await tourEngine.startTour(tourId);
   }
 
   // --- Manual Bounding Box, Period Range & Seasonal Filters ---
@@ -3090,7 +3595,21 @@
           intro.style.pointerEvents = 'none';
           intro.classList.add('hidden');
         }
-        launchTourStep(0);
+        let firstVisitDismissed = false;
+        try {
+          firstVisitDismissed = localStorage.getItem('kendall_first_visit_tour_dismissed') === 'true';
+        } catch (e) {}
+        if (!firstVisitDismissed) {
+          document.getElementById('modal-first-visit')?.classList.remove('hidden');
+        }
+      });
+    }
+
+    // Guide Me Header Button
+    const btnGuideMe = document.getElementById('btn-guide-me');
+    if (btnGuideMe) {
+      btnGuideMe.addEventListener('click', () => {
+        tourEngine.startTour('site_tour');
       });
     }
 
@@ -3103,9 +3622,110 @@
           intro.style.pointerEvents = 'none';
           intro.classList.add('hidden');
         }
-        launchTourStep(0);
+        tourEngine.startTour('site_tour');
       });
     }
+
+    // First-Visit Modal Actions
+    const btnFirstVisitTour = document.getElementById('btn-first-visit-tour');
+    const btnFirstVisitDismiss = document.getElementById('btn-first-visit-dismiss');
+    if (btnFirstVisitTour) {
+      btnFirstVisitTour.addEventListener('click', () => {
+        document.getElementById('modal-first-visit')?.classList.add('hidden');
+        try {
+          localStorage.setItem('kendall_first_visit_tour_dismissed', 'true');
+        } catch (e) {}
+        tourEngine.startTour('site_tour');
+      });
+    }
+    if (btnFirstVisitDismiss) {
+      btnFirstVisitDismiss.addEventListener('click', () => {
+        document.getElementById('modal-first-visit')?.classList.add('hidden');
+        try {
+          localStorage.setItem('kendall_first_visit_tour_dismissed', 'true');
+        } catch (e) {}
+      });
+    }
+
+    // Floating Tour Controller Buttons
+    const btnTourPlayPause = document.getElementById('btn-tour-ctrl-play-pause');
+    const btnTourCtrlNext = document.getElementById('btn-tour-ctrl-next');
+    const btnTourCtrlPrev = document.getElementById('btn-tour-ctrl-prev');
+    const btnTourCtrlClose = document.getElementById('btn-tour-ctrl-close');
+    const btnTourCtrlSkip = document.getElementById('btn-tour-ctrl-skip');
+    const btnTourCtrlMute = document.getElementById('btn-tour-ctrl-mute');
+    const btnTourCtrlCaptions = document.getElementById('btn-tour-ctrl-captions');
+    const btnTourSpeed = document.getElementById('btn-tour-speed');
+    const speedOpts = document.querySelectorAll('.tour-speed-dropdown .speed-opt');
+    const btnResumeTour = document.getElementById('btn-resume-tour');
+    const btnEnableSound = document.getElementById('btn-tour-enable-sound');
+
+    if (btnTourPlayPause) btnTourPlayPause.addEventListener('click', () => tourEngine.togglePlayPause());
+    if (btnTourCtrlNext) btnTourCtrlNext.addEventListener('click', () => tourEngine.advanceStep(1));
+    if (btnTourCtrlPrev) btnTourCtrlPrev.addEventListener('click', () => tourEngine.advanceStep(-1));
+    if (btnTourCtrlClose) btnTourCtrlClose.addEventListener('click', () => tourEngine.stopTour());
+    if (btnTourCtrlSkip) btnTourCtrlSkip.addEventListener('click', () => tourEngine.stopTour());
+    if (btnTourCtrlMute) btnTourCtrlMute.addEventListener('click', () => tourEngine.toggleMute());
+    if (btnTourCtrlCaptions) btnTourCtrlCaptions.addEventListener('click', () => tourEngine.toggleCaptions());
+    if (btnResumeTour) btnResumeTour.addEventListener('click', () => tourEngine.resumeFromManualInteraction());
+    document.getElementById('btn-tour-complete-close')?.addEventListener('click', () => {
+      document.getElementById('modal-tour-complete')?.classList.add('hidden');
+    });
+    if (btnEnableSound) {
+      btnEnableSound.addEventListener('click', () => {
+        document.getElementById('tour-autoplay-prompt')?.classList.add('hidden');
+        tourAudio.play().catch(() => {});
+      });
+    }
+
+    if (btnTourSpeed) {
+      btnTourSpeed.addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.getElementById('tour-speed-dropdown')?.classList.toggle('hidden');
+      });
+    }
+    speedOpts.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const spd = parseFloat(btn.dataset.speed || '1.0');
+        tourEngine.setSpeed(spd);
+      });
+    });
+    document.addEventListener('click', () => {
+      document.getElementById('tour-speed-dropdown')?.classList.add('hidden');
+    });
+
+    // Map listeners for tour highlighting tracking and manual drag detection
+    if (state.map) {
+      state.map.on('move', () => {
+        tourEngine.updateHighlight();
+      });
+      state.map.on('render', () => {
+        if (tourEngine.activeTour) tourEngine.updateHighlight();
+      });
+      state.map.on('dragstart', () => {
+        if (tourEngine.activeTour && tourEngine.isPlaying && !state.isTourFlying) {
+          tourEngine.pauseForManualInteraction();
+        }
+      });
+      state.map.on('rotatestart', () => {
+        if (tourEngine.activeTour && tourEngine.isPlaying && !state.isTourFlying) {
+          tourEngine.pauseForManualInteraction();
+        }
+      });
+      state.map.on('pitchstart', () => {
+        if (tourEngine.activeTour && tourEngine.isPlaying && !state.isTourFlying) {
+          tourEngine.pauseForManualInteraction();
+        }
+      });
+    }
+
+    window.addEventListener('resize', () => {
+      if (tourEngine.activeTour) tourEngine.updateHighlight();
+    });
+    window.addEventListener('scroll', () => {
+      if (tourEngine.activeTour) tourEngine.updateHighlight();
+    }, true);
 
     const btnTour = document.getElementById('btn-start-tour');
     if (btnTour) {
@@ -3681,6 +4301,26 @@
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT') return;
 
+      if (tourEngine.activeTour) {
+        if (e.code === 'Space') {
+          e.preventDefault();
+          tourEngine.togglePlayPause();
+          return;
+        } else if (e.code === 'ArrowRight') {
+          e.preventDefault();
+          tourEngine.advanceStep(1);
+          return;
+        } else if (e.code === 'ArrowLeft') {
+          e.preventDefault();
+          tourEngine.advanceStep(-1);
+          return;
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          tourEngine.stopTour();
+          return;
+        }
+      }
+
       if (e.code === 'Space') {
         e.preventDefault();
         togglePlayPause();
@@ -3703,7 +4343,7 @@
       } else if (e.key === '4') {
         launchTourStep(3);
       } else if (e.key.toLowerCase() === 't') {
-        launchTourStep(0);
+        tourEngine.startTour('site_tour');
       } else if (e.key.toLowerCase() === 'd') {
         toggleDrawRegion();
       } else if (e.key.toLowerCase() === 'r') {
@@ -3726,10 +4366,13 @@
       } else if (e.key.toLowerCase() === 'p') {
         toggleTilt();
       } else if (e.key === 'Escape') {
+        if (tourEngine.activeTour) tourEngine.stopTour();
         if (state.isDrawingRegion) toggleDrawRegion(false);
         setPopoverExpanded(false);
         hideMilestoneToast();
         document.getElementById('modal-shortcuts')?.classList.add('hidden');
+        document.getElementById('modal-first-visit')?.classList.add('hidden');
+        document.getElementById('modal-tour-complete')?.classList.add('hidden');
         document.getElementById('tour-card')?.classList.add('hidden');
         document.getElementById('presets-menu')?.classList.add('hidden');
       } else if (e.key === '?') {
@@ -3746,6 +4389,12 @@
     await initMap();
     setupListeners();
     updateLooksUI();
+
+    // Check first-visit offer
+    let firstVisitDismissed = false;
+    try {
+      firstVisitDismissed = localStorage.getItem('kendall_first_visit_tour_dismissed') === 'true';
+    } catch (e) {}
 
     // Initialize projection UI state
     setProjection(state.projection, false);
@@ -3809,6 +4458,7 @@
   window.appState = state;
   window.kendall = {
     state,
+    tourEngine,
     setProjection,
     toggleTilt,
     dropPinMarker,

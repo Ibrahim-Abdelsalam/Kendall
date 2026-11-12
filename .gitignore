@@ -13,3 +13,8 @@ __pycache__/
 .ipynb_checkpoints/
 .vscode/
 .idea/
+
+# Large Model Weights (downloaded separately)
+models/**/*.onnx
+models/**/*.bin
+

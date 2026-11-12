@@ -37,6 +37,7 @@ echo ">>> [STAGE 2/4] Running Numerical & Scientific Pytest Suite..."
     tests/test_statistics.py \
     tests/test_regression.py \
     tests/test_time_order.py \
+    tests/test_tour_text.py \
     -v --tb=short
 echo ">>> Stage 2 Complete."
 echo ""
@@ -48,8 +49,8 @@ echo ">>> Stage 3 Complete."
 echo ""
 
 # Stage 4: Playwright Headless Browser Smoke Tests
-echo ">>> [STAGE 4/4] Running Playwright Headless Browser Smoke Suite..."
-"$PYTHON_BASE" -m pytest tests/test_browser_smoke.py -v --tb=short
+echo ">>> [STAGE 4/4] Running Playwright Headless Browser Smoke & Tour Suite..."
+"$PYTHON_BASE" -m pytest tests/test_browser_smoke.py tests/test_tour_browser.py -v --tb=short
 echo ">>> Stage 4 Complete."
 echo ""
 
