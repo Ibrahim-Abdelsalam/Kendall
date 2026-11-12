@@ -229,6 +229,8 @@ merra2_tqv:
 modis_ndvi:
   id: modis_ndvi
   name: Vegetation Greenness (NDVI)
+  included_in_submission: false
+  status: not included in this submission
   student_definition: A satellite vegetation index indicating photosynthetic activity
     and canopy greenness ranging from -0.2 to 1.0.
   units: '1'

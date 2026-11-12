@@ -29,6 +29,7 @@ class VariableConfig:
     is_flux_rate: bool = False
     scale_factor: float = 1.0
     add_offset: float = 0.0
+    included_in_submission: bool = True
 
 
 VARIABLES: Dict[str, VariableConfig] = {
@@ -209,6 +210,7 @@ VARIABLES: Dict[str, VariableConfig] = {
     "modis_ndvi": VariableConfig(
         id="modis_ndvi",
         name="Vegetation Greenness (NDVI)",
+        included_in_submission=False,
         student_definition="A satellite vegetation index indicating photosynthetic activity and canopy greenness ranging from -0.2 to 1.0.",
         units="1",
         dataset_short_name="MOD13C2",

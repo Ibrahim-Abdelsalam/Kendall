@@ -44,25 +44,33 @@ export EARTHDATA_PASSWORD="your_password"
 ```
 *(Never hardcode or commit credentials).*
 
-## Running the Pipeline
+## Verification & Testing Suite
 
-1. **Test Access**:
-   ```bash
-   python src/test_access.py
-   ```
-2. **Download Historical Granules**:
-   ```bash
-   python src/download.py
-   ```
-3. **Preprocess & Compute Anomalies**:
-   ```bash
-   python src/preprocess.py
-   ```
-4. **Compute Trends & Significance**:
-   ```bash
-   python src/trend.py
-   ```
-5. **Validate Output**:
-   ```bash
-   python src/validate.py
-   ```
+The repository includes a comprehensive, automated multi-layer test and audit suite spanning data completeness, numerical physics, statistical equivalence, and headless browser interactions.
+
+### Unified Single-Command Runner
+
+Execute the entire four-stage audit in a single command:
+
+```bash
+bash scripts/run_all_checks.sh
+# or
+make audit
+```
+
+### Environment Architecture
+
+The project utilizes Anaconda environments to separate heavy geospatial C-extensions from headless browser drivers:
+1. **Scientific & Statistical Environment (`plot-twist`)**:
+   - Location: `/opt/anaconda3/envs/plot-twist`
+   - Python: 3.11 with `xarray`, `scipy`, `numpy`, `netCDF4`, `h5py`, `pymannkendall`, `pandas`, `pytest`.
+   - Runs: Data integrity audits (`src/audit.py`) and numerical/regression test suites (`tests/`).
+2. **Headless Browser Environment (`base`)**:
+   - Location: `/opt/anaconda3`
+   - Python: 3.13 with `playwright`, `pytest-playwright`, connected to Brave / Chromium.
+   - Runs: Browser smoke test suite (`tests/test_browser_smoke.py`).
+3. **Client JavaScript Engine (`node`)**:
+   - Node.js v22.x runs `tests/validate_js_stats.js` to verify exact statistical parity between the client's in-browser math and backend Python calculations.
+
+The orchestrator script `scripts/run_all_checks.sh` automatically routes each stage to its dedicated runtime.
+

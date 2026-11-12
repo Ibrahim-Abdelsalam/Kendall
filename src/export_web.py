@@ -161,7 +161,22 @@ def export_variable_to_web(var_id: str) -> Dict[str, Any]:
     n_time, n_lat, n_lon = anom_vals.shape
 
     finite_anom = anom_vals[np.isfinite(anom_vals)]
-    max_abs = float(np.max(np.abs(finite_anom))) if len(finite_anom) > 0 else 1.0
+    glacier_note = None
+    if var_id == "gldas_swe":
+        cap_val = 110.0  # kg/m^2 (preserves sub-millimeter precision in seasonal cells)
+        anom_vals = np.clip(anom_vals, -cap_val, cap_val)
+        finite_anom = anom_vals[np.isfinite(anom_vals)]
+        max_abs = cap_val
+        glacier_note = "Glacier anomaly capping: anomalies capped at +/-110 kg/m^2 to preserve sub-millimeter precision in seasonal snow cells."
+    elif var_id == "gldas_snow_depth":
+        cap_val = 0.6  # meters (preserves millimeter precision in seasonal cells)
+        anom_vals = np.clip(anom_vals, -cap_val, cap_val)
+        finite_anom = anom_vals[np.isfinite(anom_vals)]
+        max_abs = cap_val
+        glacier_note = "Glacier anomaly capping: anomalies capped at +/-0.6 m to preserve millimeter precision in seasonal snow cells."
+    else:
+        max_abs = float(np.max(np.abs(finite_anom))) if len(finite_anom) > 0 else 1.0
+
     anom_scale = max_abs / 30000.0 if max_abs > 0 else 1.0
 
     scaled_anom = np.where(np.isfinite(anom_vals), np.round(anom_vals / anom_scale), -32768).astype(np.int16)
@@ -184,18 +199,39 @@ def export_variable_to_web(var_id: str) -> Dict[str, Any]:
     else:
         cluster_sig = np.zeros_like(sig_fdr, dtype=np.int8)
 
-    max_slope = float(np.nanmax(np.abs(slopes))) if np.any(np.isfinite(slopes)) else 1.0
+    valid_slopes = slopes[valid_mask == 1]
+    if var_id == "gldas_swe":
+        cap_slope = 60.0
+        slopes_for_scaling = np.clip(slopes, -cap_slope, cap_slope)
+        max_slope = cap_slope
+    elif var_id == "gldas_snow_depth":
+        cap_slope = 0.5
+        slopes_for_scaling = np.clip(slopes, -cap_slope, cap_slope)
+        max_slope = cap_slope
+    else:
+        slopes_for_scaling = slopes
+        max_slope = float(np.nanmax(np.abs(valid_slopes))) if len(valid_slopes) > 0 and np.any(np.isfinite(valid_slopes)) else 1.0
+
     slope_scale = max_slope / 30000.0 if max_slope > 0 else 1.0
-    scaled_slopes = np.where(np.isfinite(slopes), np.round(slopes / slope_scale), -32768).astype(np.int16)
+    scaled_slopes = np.where(np.isfinite(slopes_for_scaling) & (valid_mask == 1), np.round(slopes_for_scaling / slope_scale), -32768).astype(np.int16)
+
+    if "hr_nan" in ds_trend:
+        hr_nan_arr = ds_trend["hr_nan"].values.astype(np.int8)
+    else:
+        hr_nan_arr = np.where((valid_mask == 1) & np.isnan(p_hr), 1, 0).astype(np.int8)
+
+    p_plain_vals = ds_trend["p_value_plain"].values.astype(np.float32) if "p_value_plain" in ds_trend else p_hr
 
     trend_payload = {
         "slope_scale": slope_scale,
         "slopes": scaled_slopes.tolist(),
         "p_values": np.where(np.isfinite(p_hr), np.round(p_hr, 4), None).tolist(),
+        "p_values_plain": np.where(np.isfinite(p_plain_vals), np.round(p_plain_vals, 4), None).tolist(),
         "q_values": np.where(np.isfinite(q_fdr), np.round(q_fdr, 4), None).tolist(),
         "significant_fdr": sig_fdr.tolist(),
         "cluster_significant": cluster_sig.tolist(),
         "valid": valid_mask.tolist(),
+        "hr_nan": hr_nan_arr.tolist(),
         "era_sign_flip": era_flips.tolist(),
     }
 
@@ -308,6 +344,7 @@ def export_variable_to_web(var_id: str) -> Dict[str, Any]:
             "anom_dtype": "int16",
             "anom_shape": [n_time, n_lat, n_lon],
             "slope_scale_factor": slope_scale,
+            "glacier_cap_note": glacier_note,
         },
         "statistics": {
             "share_significant_plain_pct": round(pct_pl, 2),

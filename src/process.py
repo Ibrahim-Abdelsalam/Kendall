@@ -106,6 +106,20 @@ def regrid_merra2_interp(
     return interp(pts).reshape(72, 144).astype(np.float32)
 
 
+def extract_file_time(fpath: Path, group: str | None = None) -> tuple[int, int]:
+    """Read internal time coordinate from dataset (not filename)."""
+    with xr.open_dataset(fpath, group=group, engine="netcdf4") as ds:
+        if "time" not in ds.coords and "time" not in ds.data_vars:
+            raise ValueError(f"No 'time' coordinate found in {fpath.name}")
+        tval = ds["time"].values
+        if hasattr(tval, "__len__") and len(tval) > 0:
+            tval = tval[0]
+        if hasattr(tval, "year") and hasattr(tval, "month"):
+            return int(tval.year), int(tval.month)
+        ts = pd.to_datetime(tval)
+        return int(ts.year), int(ts.month)
+
+
 def process_variable(var_id: str) -> Path:
     """Process all granules for a given variable into anomalies NetCDF."""
     if var_id not in VARIABLES:
@@ -131,23 +145,59 @@ def process_variable(var_id: str) -> Path:
         raw_dir = Path("data/raw") / var_cfg.dataset_short_name.lower()
         pattern = f"*.{var_cfg.file_format}"
 
-    files = sorted(raw_dir.glob(pattern))
-    if not files:
+    raw_files = list(raw_dir.glob(pattern))
+    if not raw_files:
         raise FileNotFoundError(f"No granules found matching '{pattern}' in {raw_dir}")
 
-    print(f"[*] Found {len(files)} files to process in {raw_dir}...")
-    t0 = time.time()
+    print(f"[*] Reading internal time coordinates for {len(raw_files)} files in {raw_dir}...")
+    t_sort_start = time.time()
+    group = var_cfg.source_group
 
-    time_coords = []
+    month_to_file: dict[tuple[int, int], Path] = {}
+    for fpath in raw_files:
+        ym = extract_file_time(fpath, group=group)
+        if ym in month_to_file:
+            raise ValueError(
+                f"DUPLICATE MONTH DETECTED: Files '{month_to_file[ym].name}' and '{fpath.name}' "
+                f"both map to month {ym[0]}-{ym[1]:02d}"
+            )
+        month_to_file[ym] = fpath
+
+    sorted_ym = sorted(month_to_file.keys())
+
+    # Contiguity check: ensure no missing months between start and end
+    start_y, start_m = sorted_ym[0]
+    end_y, end_m = sorted_ym[-1]
+    cur = pd.Timestamp(year=start_y, month=start_m, day=1)
+    end_dt = pd.Timestamp(year=end_y, month=end_m, day=1)
+
+    expected_months = []
+    while cur <= end_dt:
+        expected_months.append((cur.year, cur.month))
+        if cur.month == 12:
+            cur = pd.Timestamp(year=cur.year + 1, month=1, day=1)
+        else:
+            cur = pd.Timestamp(year=cur.year, month=cur.month + 1, day=1)
+
+    missing = [m for m in expected_months if m not in month_to_file]
+    if missing:
+        missing_str = ", ".join(f"{y}-{m:02d}" for y, m in missing)
+        raise ValueError(
+            f"MISSING MONTHS DETECTED in {raw_dir}: Found {len(sorted_ym)} months, "
+            f"expected {len(expected_months)} contiguous months. Missing: {missing_str}"
+        )
+
+    # Sort files strictly by internal time coordinate
+    files = [month_to_file[ym] for ym in sorted_ym]
+    time_coords = [pd.Timestamp(year=ym[0], month=ym[1], day=1) for ym in sorted_ym]
+    print(f"[+] Time sorting verified: {len(files)} contiguous months sorted in {time.time() - t_sort_start:.2f}s "
+          f"({sorted_ym[0][0]}-{sorted_ym[0][1]:02d} to {sorted_ym[-1][0]}-{sorted_ym[-1][1]:02d}).")
+
+    t0 = time.time()
     regridded_all = []
 
     for idx, fpath in enumerate(files):
-        # Extract date from filename
-        match = re.search(r"[\.A](\d{4})(\d{2})", fpath.name)
-        if not match:
-            continue
-        year, month = int(match.group(1)), int(match.group(2))
-        time_coords.append(pd.Timestamp(year=year, month=month, day=1))
+        year, month = sorted_ym[idx]
 
         group = var_cfg.source_group
         engine = "netcdf4" if var_cfg.file_format.lower() in ("hdf5", "nc4") else None

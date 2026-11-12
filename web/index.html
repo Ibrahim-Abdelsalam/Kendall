@@ -311,14 +311,6 @@
       </div>
     </div>
 
-    <!-- Analysis-Choices Multiple-Testing Counter Notice -->
-    <div class="analysis-counter-card hidden" id="analysis-counter-card">
-      <div class="counter-header">
-        <span class="counter-icon">⚠️</span>
-        <span id="counter-notice-text">You have tested 5 combinations. With this many looks, a p below 0.05 will appear by chance about 1 time in 20. These p-values are not adjusted.</span>
-      </div>
-      <button class="counter-reset-link" id="btn-reset-counter" title="Reset combinations counter">reset counter</button>
-    </div>
 
     <!-- Real-Time Monthly Observation Telemetry -->
     <div class="obs-telemetry-card" id="obs-telemetry-card">
@@ -711,6 +703,42 @@
         <div class="shortcut-row"><kbd>Esc</kbd> <span>Close Modals / Exit Draw Mode</span></div>
       </div>
     </div>
+  </div>
+
+  <!-- Analysis-Choices Multiple-Testing Looks Pill & Popover -->
+  <div class="analysis-looks-widget" id="analysis-looks-widget">
+    <button class="looks-pill" id="looks-pill" aria-haspopup="dialog" aria-expanded="false" title="Multiple comparisons counter (click or hover to inspect)">
+      <span class="looks-pill-icon" id="looks-pill-icon">🔍</span>
+      <span class="looks-pill-text" id="looks-pill-text">0 looks</span>
+    </button>
+    <div class="looks-popover hidden" id="looks-popover" role="dialog" aria-label="Multiple Testing Analysis Notice">
+      <div class="looks-popover-header">
+        <span class="looks-popover-title">
+          <span class="popover-warn-icon">⚠️</span>
+          MULTIPLE COMPARISONS
+        </span>
+        <button class="looks-popover-close" id="btn-close-looks-popover" aria-label="Close dialog [Esc]">&times;</button>
+      </div>
+      <div class="looks-popover-body">
+        <p class="looks-notice-text" id="counter-notice-text">
+          You have tested 0 combinations. With this many looks, the chance of a false positive (p &lt; 0.05) is up to about 0% because looks overlap and are not fully independent. These p-values are not adjusted for multiple testing.
+        </p>
+      </div>
+      <div class="looks-popover-footer">
+        <button class="counter-reset-link" id="btn-reset-counter" title="Reset combinations counter">reset counter</button>
+        <span class="popover-esc-hint">ESC to close</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Auto-Dismissing Milestone Toast (5, 10, 20 looks) -->
+  <div class="looks-milestone-toast hidden" id="looks-milestone-toast" role="status" aria-live="polite">
+    <span class="milestone-toast-icon">⚠️</span>
+    <div class="milestone-toast-content">
+      <div class="milestone-toast-title">MULTIPLE COMPARISONS ALERT</div>
+      <div class="milestone-toast-text" id="milestone-toast-text"></div>
+    </div>
+    <button class="milestone-toast-close" id="btn-close-milestone-toast" aria-label="Dismiss notice">&times;</button>
   </div>
 
   <!-- Error Toast for Resilient Visual Failure Reporting -->

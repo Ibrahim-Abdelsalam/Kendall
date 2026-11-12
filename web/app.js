@@ -74,7 +74,7 @@
       varId: 'merra2_aod',
       name: 'Central Canada Boreal, North America',
       season: 'JJA',
-      body: 'Across all months, Canadian boreal AOD shows a modest trend (+0.009/dec). But isolating June–July–August (summer wildfire season) reveals an intense +0.065/decade surge (>7× steeper, p = 0.022), driven by historic boreal megafires in 2021, 2023 (peak AOD 0.50), and 2025. Seasonal slicing unmasks trends hidden by full-year averages.',
+      body: 'Across all months, Canadian boreal AOD shows a modest trend (+0.013/dec). But isolating June–July–August (summer wildfire season) reveals an intense +0.136/decade surge (10× steeper, p = 0.027), driven by historic boreal megafires in 2021, 2023 (peak AOD 0.50), and 2025. Seasonal slicing unmasks trends hidden by full-year averages.',
     },
   ];
 
@@ -1730,14 +1730,142 @@
     return Math.round(num).toLocaleString('en-US');
   }
 
-  function recordAnalysisChoice() {
-    state.analysisChoicesCount++;
-    const card = document.getElementById('analysis-counter-card');
-    const text = document.getElementById('counter-notice-text');
-    if (state.analysisChoicesCount >= 5 && card && text) {
-      text.textContent = `You have tested ${state.analysisChoicesCount} combinations. With this many looks, a p below 0.05 will appear by chance about 1 time in 20. These p-values are not adjusted for multiple testing.`;
-      card.classList.remove('hidden');
+  const MILESTONE_LOOKS = [5, 10, 20];
+  const triggeredMilestones = new Set();
+  let milestoneToastTimer = null;
+  let popoverHoverTimer = null;
+  let idleInactivityTimer = null;
+  const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
+
+  function getMultipleTestingNoticeText(count) {
+    const pct = Math.min(99, Math.round((1 - Math.pow(0.95, count)) * 100));
+    return `You have tested ${count} combinations. With this many looks, the chance of a false positive (p < 0.05) is up to about ${pct}% because looks overlap and are not fully independent. These p-values are not adjusted for multiple testing.`;
+  }
+
+  function updateLooksUI() {
+    const pill = document.getElementById('looks-pill');
+    const pillText = document.getElementById('looks-pill-text');
+    const pillIcon = document.getElementById('looks-pill-icon');
+    const noticeText = document.getElementById('counter-notice-text');
+    const count = state.analysisChoicesCount || 0;
+
+    if (pillText) {
+      pillText.textContent = `${count} ${count === 1 ? 'look' : 'looks'}`;
     }
+    if (pill) {
+      if (count >= 5) {
+        pill.classList.add('has-warning');
+        if (pillIcon) pillIcon.textContent = '⚠️';
+      } else {
+        pill.classList.remove('has-warning');
+        if (pillIcon) pillIcon.textContent = '🔍';
+      }
+    }
+    if (noticeText) {
+      noticeText.textContent = getMultipleTestingNoticeText(count);
+    }
+  }
+
+  function showMilestoneToast(count) {
+    const toast = document.getElementById('looks-milestone-toast');
+    const textEl = document.getElementById('milestone-toast-text');
+    if (!toast || !textEl) return;
+
+    if (milestoneToastTimer) {
+      clearTimeout(milestoneToastTimer);
+      milestoneToastTimer = null;
+    }
+
+    textEl.textContent = getMultipleTestingNoticeText(count);
+    toast.classList.remove('hidden');
+
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!prefersReduced && typeof gsap !== 'undefined') {
+      gsap.fromTo(toast, { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.3, ease: 'power2.out' });
+    } else {
+      toast.style.opacity = '1';
+    }
+
+    milestoneToastTimer = setTimeout(() => {
+      hideMilestoneToast();
+    }, 6000);
+  }
+
+  function hideMilestoneToast() {
+    const toast = document.getElementById('looks-milestone-toast');
+    if (!toast || toast.classList.contains('hidden')) return;
+
+    if (milestoneToastTimer) {
+      clearTimeout(milestoneToastTimer);
+      milestoneToastTimer = null;
+    }
+
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!prefersReduced && typeof gsap !== 'undefined') {
+      gsap.to(toast, {
+        opacity: 0,
+        y: -10,
+        duration: 0.2,
+        ease: 'power2.in',
+        onComplete: () => {
+          toast.classList.add('hidden');
+        },
+      });
+    } else {
+      toast.classList.add('hidden');
+    }
+  }
+
+  let isPopoverPinned = false;
+  let lastPillMouseEnter = 0;
+
+  function setPopoverExpanded(expanded) {
+    const popover = document.getElementById('looks-popover');
+    const pill = document.getElementById('looks-pill');
+    if (!popover || !pill) return;
+
+    if (popoverHoverTimer) {
+      clearTimeout(popoverHoverTimer);
+      popoverHoverTimer = null;
+    }
+
+    if (expanded) {
+      updateLooksUI();
+      popover.classList.remove('hidden');
+      pill.setAttribute('aria-expanded', 'true');
+      const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!prefersReduced && typeof gsap !== 'undefined') {
+        gsap.fromTo(popover, { opacity: 0, y: -6 }, { opacity: 1, y: 0, duration: 0.2, ease: 'power2.out' });
+      }
+    } else {
+      isPopoverPinned = false;
+      popover.classList.add('hidden');
+      pill.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  function recordAnalysisChoice() {
+    if (state.isTourInitializing) return;
+    state.analysisChoicesCount++;
+    updateLooksUI();
+
+    const count = state.analysisChoicesCount;
+    if (MILESTONE_LOOKS.includes(count) && !triggeredMilestones.has(count)) {
+      triggeredMilestones.add(count);
+      showMilestoneToast(count);
+    }
+  }
+
+  function resetAnalysisCounter() {
+    state.analysisChoicesCount = 0;
+    updateLooksUI();
+  }
+
+  function resetInactivityTimer() {
+    if (idleInactivityTimer) clearTimeout(idleInactivityTimer);
+    idleInactivityTimer = setTimeout(() => {
+      resetAnalysisCounter();
+    }, INACTIVITY_TIMEOUT_MS);
   }
 
   // --- ECharts Time-Series Graph ---
@@ -2258,12 +2386,25 @@
     const pplainEl = document.getElementById('val-pplain');
     const fdrBadge = document.getElementById('verdict-fdr-badge');
 
+    const isHrNan = isPrecomputedCell
+      ? (trend.hr_nan && trend.hr_nan[latIdx] && trend.hr_nan[latIdx][lonIdx] === 1) ||
+        (trend.p_values && trend.p_values[latIdx][lonIdx] === null)
+      : (p_hr === null || isNaN(p_hr) || p_hr === undefined);
+
     animateNumber(rateEl, officialSlopeDecade, 2, '+');
     unitEl.textContent = meta.trend_units || 'units/dec';
-    animateNumber(phrEl, p_hr, 4);
+    if (isHrNan) {
+      phrEl.textContent = 'N/A';
+    } else {
+      animateNumber(phrEl, p_hr, 4);
+    }
     animateNumber(pplainEl, p_plain, 4);
     if (fdrBadge) {
-      fdrBadge.textContent = isPrecomputedCell ? `FDR q = ${q_fdr.toFixed(4)}` : `p(HR) = ${p_hr.toFixed(4)}`;
+      if (isPrecomputedCell) {
+        fdrBadge.textContent = isHrNan ? `p(plain) = ${p_plain.toFixed(4)}` : `FDR q = ${q_fdr.toFixed(4)}`;
+      } else {
+        fdrBadge.textContent = isHrNan ? `p(plain) = ${p_plain.toFixed(4)}` : `p(HR) = ${p_hr.toFixed(4)}`;
+      }
     }
 
     const verdictCard = document.getElementById('verdict-card');
@@ -2298,11 +2439,22 @@
     gsap.to(ciPoint, { left: `${pointPct}%`, duration: 0.5, ease: 'power2.out' });
 
     const cautionBox = document.getElementById('verdict-caution-box');
+    const cautionHeader = document.getElementById('caution-header-text');
     const cautionText = document.getElementById('verdict-caution-text');
     const eb = meta.era_break_2014_check || {};
-    const hasCaution = isPrecomputedCell && (eb.caution === true || (eb.amazon_both_eras_sig_flip && locationDisplayName.includes('Amazon')));
+    const hasEraCaution = isPrecomputedCell && (eb.caution === true || (eb.amazon_both_eras_sig_flip && locationDisplayName.includes('Amazon')));
 
-    if (hasCaution && cautionBox && cautionText) {
+    if (isHrNan && cautionBox && cautionText) {
+      if (cautionHeader) cautionHeader.textContent = 'STATISTICAL METHOD NOTICE';
+      const hrNote = 'autocorrelation adjustment unavailable here; plain Mann-Kendall p shown';
+      if (hasEraCaution && eb.caution_note) {
+        cautionText.textContent = `${eb.caution_note} (Note: ${hrNote})`;
+      } else {
+        cautionText.textContent = hrNote;
+      }
+      cautionBox.classList.remove('hidden');
+    } else if (hasEraCaution && cautionBox && cautionText) {
+      if (cautionHeader) cautionHeader.textContent = 'OBSERVING SYSTEM SHIFT NOTICE';
       cautionText.textContent =
         eb.caution_note ||
         'Notice: Trend-aware test indicates a surviving 2014 era-step discontinuity. Interpret full-record trend with caution.';
@@ -2660,6 +2812,8 @@
 
   // --- Guided Tour Engine ---
   async function launchTourStep(idx) {
+    state.isTourInitializing = true;
+    resetAnalysisCounter();
     state.tourIndex = idx;
     const step = TOUR_CASES[idx];
     const tourCard = document.getElementById('tour-card');
@@ -2704,6 +2858,9 @@
         essential: true,
       });
     }
+
+    state.isTourInitializing = false;
+    resetAnalysisCounter();
   }
 
   // --- Manual Bounding Box, Period Range & Seasonal Filters ---
@@ -3271,15 +3428,96 @@
       }
     });
 
-    // Analysis Counter Reset Link
+    // Analysis Counter Pill & Popover Controls
+    const looksPill = document.getElementById('looks-pill');
+    const looksPopover = document.getElementById('looks-popover');
+    const btnClosePopover = document.getElementById('btn-close-looks-popover');
+    const btnCloseMilestoneToast = document.getElementById('btn-close-milestone-toast');
     const btnResetCounter = document.getElementById('btn-reset-counter');
+
+    if (looksPill) {
+      looksPill.addEventListener('mouseenter', () => {
+        lastPillMouseEnter = Date.now();
+        if (popoverHoverTimer) clearTimeout(popoverHoverTimer);
+        setPopoverExpanded(true);
+      });
+
+      looksPill.addEventListener('mouseleave', () => {
+        if (!isPopoverPinned) {
+          popoverHoverTimer = setTimeout(() => {
+            setPopoverExpanded(false);
+          }, 250);
+        }
+      });
+
+      looksPill.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const now = Date.now();
+        // If clicked within 600ms of hover or not currently pinned, pin it open
+        if (!isPopoverPinned || (now - lastPillMouseEnter < 600)) {
+          isPopoverPinned = true;
+          setPopoverExpanded(true);
+        } else {
+          isPopoverPinned = false;
+          setPopoverExpanded(false);
+        }
+      });
+    }
+
+    if (looksPopover) {
+      looksPopover.addEventListener('mouseenter', () => {
+        if (popoverHoverTimer) clearTimeout(popoverHoverTimer);
+      });
+
+      looksPopover.addEventListener('mouseleave', () => {
+        if (!isPopoverPinned) {
+          popoverHoverTimer = setTimeout(() => {
+            setPopoverExpanded(false);
+          }, 250);
+        }
+      });
+
+      looksPopover.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+    }
+
+    if (btnClosePopover) {
+      btnClosePopover.addEventListener('click', (e) => {
+        e.stopPropagation();
+        isPopoverPinned = false;
+        setPopoverExpanded(false);
+      });
+    }
+
     if (btnResetCounter) {
       btnResetCounter.addEventListener('click', (e) => {
         e.preventDefault();
-        state.analysisChoicesCount = 0;
-        document.getElementById('analysis-counter-card')?.classList.add('hidden');
+        e.stopPropagation();
+        resetAnalysisCounter();
       });
     }
+
+    if (btnCloseMilestoneToast) {
+      btnCloseMilestoneToast.addEventListener('click', (e) => {
+        e.stopPropagation();
+        hideMilestoneToast();
+      });
+    }
+
+    // Click away to close popover
+    document.addEventListener('click', (e) => {
+      const widget = document.getElementById('analysis-looks-widget');
+      if (widget && !widget.contains(e.target)) {
+        setPopoverExpanded(false);
+      }
+    });
+
+    // Inactivity listener tracking
+    ['mousemove', 'mousedown', 'keydown', 'touchstart', 'pointerdown', 'wheel'].forEach((evt) => {
+      window.addEventListener(evt, resetInactivityTimer, { passive: true });
+    });
+    resetInactivityTimer();
 
     // Period Selection Controls
     document.querySelectorAll('.period-chips .chip-btn').forEach((btn) => {
@@ -3489,6 +3727,8 @@
         toggleTilt();
       } else if (e.key === 'Escape') {
         if (state.isDrawingRegion) toggleDrawRegion(false);
+        setPopoverExpanded(false);
+        hideMilestoneToast();
         document.getElementById('modal-shortcuts')?.classList.add('hidden');
         document.getElementById('tour-card')?.classList.add('hidden');
         document.getElementById('presets-menu')?.classList.add('hidden');
@@ -3505,6 +3745,7 @@
 
     await initMap();
     setupListeners();
+    updateLooksUI();
 
     // Initialize projection UI state
     setProjection(state.projection, false);
@@ -3552,6 +3793,18 @@
     }
   }
 
+  function selectPoint(lat, lon) {
+    if (state.selectionMode !== 'point') {
+      setSelectionMode('point');
+    }
+    const snap = snapCoordsToGrid(lat, lon);
+    state.cellIndex = snap;
+    state.currentPin = { lat: snap.snappedLat, lon: snap.snappedLon };
+    dropPinMarker(snap.snappedLat, snap.snappedLon);
+    recordAnalysisChoice();
+    updateInspector(snap.latIdx, snap.lonIdx);
+  }
+
   // Expose for testing & telemetry inspection
   window.appState = state;
   window.kendall = {
@@ -3559,6 +3812,9 @@
     setProjection,
     toggleTilt,
     dropPinMarker,
+    selectPoint,
+    updateInspector,
+    snapCoordsToGrid,
     switchVariable,
     launchTourStep,
     setSelectionMode,
@@ -3570,6 +3826,15 @@
     computeFullStats,
     getShareableHash,
     parseAndApplyHash,
+    recordAnalysisChoice,
+    resetAnalysisCounter,
+    updateLooksUI,
+    setPopoverExpanded,
+    showMilestoneToast,
+    hideMilestoneToast,
+    triggeredMilestones,
+    getMultipleTestingNoticeText,
+    resetInactivityTimer,
   };
   window.plotTwist = window.kendall; // Backwards-compatible alias for existing tests
 

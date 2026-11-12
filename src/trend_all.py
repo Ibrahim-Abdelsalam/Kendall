@@ -170,6 +170,7 @@ def run_trend_for_variable(var_id: str) -> Path:
     sig_plain_1d = np.where((p_val_plain_1d < 0.05) & (valid_mask_1d == 1), 1, 0).astype(np.int8)
     sig_hr_1d = np.where((p_val_hr_1d < 0.05) & (valid_mask_1d == 1), 1, 0).astype(np.int8)
     sig_fdr_1d = np.where((q_vals_1d < 0.05) & (valid_mask_1d == 1), 1, 0).astype(np.int8)
+    hr_nan_1d = np.where((valid_mask_1d == 1) & np.isnan(p_val_hr_1d), 1, 0).astype(np.int8)
 
     # Spatial cluster significance: FDR-significant and >= 3 of 8 neighbors have same sign
     cluster_sig_2d = np.zeros((n_lat, n_lon), dtype=np.int8)
@@ -238,6 +239,7 @@ def run_trend_for_variable(var_id: str) -> Path:
             "cluster_significant": (("lat", "lon"), cluster_sig_2d, {"units": "1", "description": "FDR significant with >=3 neighbors same sign"}),
             "significant_modified": (("lat", "lon"), sig_hr_1d.reshape(n_lat, n_lon), {"units": "1"}),
             "significant_plain": (("lat", "lon"), sig_plain_1d.reshape(n_lat, n_lon), {"units": "1"}),
+            "hr_nan": (("lat", "lon"), hr_nan_1d.reshape(n_lat, n_lon), {"units": "1", "description": "1 if Hamed-Rao p-value underflowed to NaN"}),
             "era_sign_flip": (("lat", "lon"), era_flip_1d.reshape(n_lat, n_lon), {"units": "1"}),
             "ols_slope": (("lat", "lon"), ols_slope_1d.reshape(n_lat, n_lon), {"units": f"{unit}/decade"}),
             "ols_p_value": (("lat", "lon"), ols_p_val_1d.reshape(n_lat, n_lon), {"units": "1"}),

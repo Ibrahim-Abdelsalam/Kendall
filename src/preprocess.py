@@ -83,11 +83,23 @@ def regrid_single_month_conservative(
 
 def process_all_granules() -> xr.Dataset:
     """Load, convert units, regrid, and aggregate all monthly files."""
-    files = sorted(RAW_DATA_DIR.glob("*.HDF5"))
-    if not files:
+    raw_files = list(RAW_DATA_DIR.glob("*.HDF5"))
+    if not raw_files:
         raise FileNotFoundError(f"No HDF5 granules found in {RAW_DATA_DIR}.")
 
-    print(f"[*] Found {len(files)} granules in {RAW_DATA_DIR}. Sorting and checking dates...")
+    month_to_file: dict[tuple[int, int], Path] = {}
+    for fpath in raw_files:
+        with xr.open_dataset(fpath, group="Grid", engine="netcdf4") as ds:
+            tval = ds["time"].values[0]
+            ym = (int(tval.year), int(tval.month))
+        if ym in month_to_file:
+            raise ValueError(f"DUPLICATE MONTH DETECTED: {month_to_file[ym].name} and {fpath.name}")
+        month_to_file[ym] = fpath
+
+    sorted_ym = sorted(month_to_file.keys())
+    files = [month_to_file[ym] for ym in sorted_ym]
+
+    print(f"[*] Found {len(files)} granules in {RAW_DATA_DIR}. Sorted by internal time coordinate...")
 
     # Open first file to extract coordinate arrays
     with xr.open_dataset(files[0], group="Grid", engine="netcdf4") as ds0:
