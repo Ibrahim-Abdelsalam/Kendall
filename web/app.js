@@ -450,6 +450,13 @@
       });
 
       state.map = map;
+      if (map.getCanvasContainer()) {
+        map.getCanvasContainer().style.width = '100%';
+        map.getCanvasContainer().style.height = '100%';
+        map.getCanvasContainer().style.position = 'absolute';
+        map.getCanvasContainer().style.inset = '0';
+      }
+      map.resize();
       setupMapInteraction(map);
 
       // Explicitly disable touch pitch (tilt must not trigger on two-finger gestures)
@@ -628,6 +635,13 @@
       map.on('load', () => {
         mapLoaded = true;
         state.map = map;
+        if (map.getCanvasContainer()) {
+          map.getCanvasContainer().style.width = '100%';
+          map.getCanvasContainer().style.height = '100%';
+          map.getCanvasContainer().style.position = 'absolute';
+          map.getCanvasContainer().style.inset = '0';
+        }
+        map.resize();
         setupMapInteraction(map);
 
         const dummyCanvas = document.createElement('canvas');

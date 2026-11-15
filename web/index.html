@@ -50,7 +50,17 @@
   <!-- TopoJSON Client for Offline/Fallback Coastline Basemap -->
   <script src="topojson-client.min.js"></script>
   
-  <link rel="stylesheet" href="style.css?v=3.0">
+  <link rel="stylesheet" href="style.css?v=3.2">
+  <style>
+    #map-container, #map, .maplibregl-canvas-container, .maplibregl-canvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+    .maplibregl-canvas-container {
+      position: absolute !important;
+      inset: 0 !important;
+    }
+  </style>
 </head>
 <body class="mission-control">
 
