@@ -12,7 +12,7 @@
 
 ---
 
-## Quick Start: Run the App in 5 Seconds
+## Quick Start
 
 Kendall runs **100% in your browser** with **zero backend servers**, **no database**, and **no API keys**. The entire 25.33-year global dataset (~38.9 MB) loads directly onto your client machine.
 
