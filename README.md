@@ -1,7 +1,4 @@
 # Kendall: Planetary Climate Trend & Era Shift Detector (2000–2025)
-
-> **"Find the trends that are real."**  
-> *Named after the Mann-Kendall non-parametric trend test.*  
 > Built for the **NASA Space Apps Challenge** · Earth Science & Open Science.
 
 [![NASA Space Apps Challenge](https://img.shields.io/badge/NASA%20Space%20Apps-Challenge%20Submission-0B3D91?style=flat-square&logo=nasa)](https://www.spaceappschallenge.org)
