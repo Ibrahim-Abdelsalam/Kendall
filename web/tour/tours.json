@@ -1,0 +1,535 @@
+{
+  "site_tour": {
+    "id": "site_tour",
+    "title": "Kendall Interactive Site Tour",
+    "description": "A comprehensive ninety-second walkthrough of Kendall's interactive map, analysis tools, and statistical safeguards.",
+    "steps": [
+      {
+        "id": "site_01_welcome",
+        "title": "Welcome to Kendall",
+        "text": "Welcome to Kendall. We are glad you are here. This interactive scientific explorer lets you investigate twenty-five years of continuous NASA satellite and reanalysis observations across planet Earth.",
+        "audio": "audio/en/site_01_welcome.mp3",
+        "target": "#map",
+        "action": {
+          "setVar": "gpm_precip",
+          "setMode": "point",
+          "setPeriod": [
+            2000,
+            2025
+          ],
+          "setSeason": "ALL",
+          "setProjection": "globe",
+          "flyTo": {
+            "lon": 10.0,
+            "lat": 15.0,
+            "zoom": 1.8,
+            "pitch": 20
+          },
+          "openPanel": null
+        },
+        "highlightStyle": "spotlight",
+        "durationFallbackMs": 8000,
+        "autoAdvance": false
+      },
+      {
+        "id": "site_02_datasets",
+        "title": "Variable Picker",
+        "text": "Use the dataset bar to switch across atmospheric and terrestrial variables, including rainfall, temperature, soil moisture, evaporation, and wildfire smoke.",
+        "audio": "audio/en/site_02_datasets.mp3",
+        "target": "#variable-picker",
+        "action": {
+          "setVar": "gpm_precip",
+          "setMode": "point"
+        },
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7000
+      },
+      {
+        "id": "site_03_selection",
+        "title": "Point vs Region Analysis",
+        "text": "Switch between Point mode to inspect single grid cells and Region mode to draw custom bounding boxes with area-weighted spatial aggregation.",
+        "audio": "audio/en/site_03_selection.mp3",
+        "target": "#selection-mode-group",
+        "action": {
+          "setMode": "point"
+        },
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7000
+      },
+      {
+        "id": "site_04_timeseries",
+        "title": "25-Year Anomaly Trajectory",
+        "text": "The time series chart displays monthly anomalies from the long-term climatology, showing the raw trajectory, a twelve-month rolling average, and Sen's slope line.",
+        "audio": "audio/en/site_04_timeseries.mp3",
+        "target": "#chart-timeseries",
+        "action": {
+          "setVar": "gpm_precip",
+          "flyTo": {
+            "lon": -61.25,
+            "lat": -3.75,
+            "zoom": 3.0,
+            "pitch": 20
+          }
+        },
+        "highlightStyle": "spotlight",
+        "durationFallbackMs": 7500
+      },
+      {
+        "id": "site_05_verdict",
+        "title": "The Verdict Card",
+        "text": "The Verdict Card evaluates whether an apparent change is genuine or just statistical noise, adjusting strictly for serial autocorrelation.",
+        "audio": "audio/en/site_05_verdict.mp3",
+        "target": "#verdict-card",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 6500
+      },
+      {
+        "id": "site_06_verdict_states",
+        "title": "Three Verdict States",
+        "text": "A location is classified into one of three rigorous states: significant trend with p under five percent, trending but not yet significant, or no trend.",
+        "audio": "audio/en/site_06_verdict_states.mp3",
+        "target": "#verdict-status-pill",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7000
+      },
+      {
+        "id": "site_07_ci_pvalue",
+        "title": "Confidence Interval and P-Value",
+        "text": "The ninety-five percent confidence interval gives the probable range of the rate, while the p-value measures the probability of observing this pattern by random chance.",
+        "audio": "audio/en/site_07_ci_pvalue.mp3",
+        "target": "#verdict-metrics-row",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7500
+      },
+      {
+        "id": "site_08_clock",
+        "title": "The Detectability Clock",
+        "text": "The Detectability Clock reveals how many years of continuous observation are needed before a trend cleanly emerges from natural climate noise.",
+        "audio": "audio/en/site_08_clock.mp3",
+        "target": "#detectability-card",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 6500
+      },
+      {
+        "id": "site_09_lineup",
+        "title": "Planetary Lineup",
+        "text": "The Planetary Lineup compares all variables simultaneously at your pinned location, checking whether shifts in rain, temperature, and soil align coherently.",
+        "audio": "audio/en/site_09_lineup.mp3",
+        "target": "#lineup-card",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7000
+      },
+      {
+        "id": "site_10_filters",
+        "title": "Period and Season Filters",
+        "text": "Slice the record into historical eras like pre-twenty-fourteen versus post-twenty-fourteen, or isolate individual seasons like summer or winter.",
+        "audio": "audio/en/site_10_filters.mp3",
+        "target": "#analysis-controls-card",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 6500
+      },
+      {
+        "id": "site_11_scrubber",
+        "title": "Monthly Timeline Scrubber",
+        "text": "Drag the scrubber timeline to step through every single month from June two thousand to September twenty twenty-five, watching global anomalies evolve.",
+        "audio": "audio/en/site_11_scrubber.mp3",
+        "target": "#timeline-container",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7000
+      },
+      {
+        "id": "site_12_projection",
+        "title": "Globe and Flat Projections",
+        "text": "Toggle effortlessly between a realistic three-dimensional orthographic globe and a flat Mercator projection with smooth camera interpolation.",
+        "audio": "audio/en/site_12_projection.mp3",
+        "target": "#proj-toggle-group",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 6500
+      },
+      {
+        "id": "site_13_looks",
+        "title": "Analysis Choices Counter",
+        "text": "The looks counter tracks your exploratory choices. Searching through multiple combinations increases false positive risk, reminding us to remain skeptical.",
+        "audio": "audio/en/site_13_looks.mp3",
+        "target": "#analysis-looks-widget",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7000
+      },
+      {
+        "id": "site_14_sources",
+        "title": "Sources, Caveats and Curiosity",
+        "text": "Every calculation adheres to open science standards, citing official NASA missions and stating all instrument limits clearly. Thank you for exploring planet Earth with us, and stay curious.",
+        "audio": "audio/en/site_14_sources.mp3",
+        "target": "#verdict-disclaimer",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 8000
+      }
+    ]
+  },
+  "case_amazon": {
+    "id": "case_amazon",
+    "title": "Amazon Basin: Drought or Sensor Break?",
+    "description": "Investigate whether dramatic Amazon drying reflects a genuine shift or a 2014 satellite sensor discontinuity.",
+    "steps": [
+      {
+        "id": "case_amz_01_flyto",
+        "title": "Amazon Basin: The Drought Puzzle",
+        "text": "We travel to the central Amazon Basin. This vast rainforest region has experienced extreme droughts and major fire events over recent decades.",
+        "audio": "audio/en/case_amz_01_flyto.mp3",
+        "target": {
+          "type": "map_coord",
+          "lng": -61.25,
+          "lat": -3.75
+        },
+        "action": {
+          "setVar": "gpm_precip",
+          "setMode": "point",
+          "setPeriod": [
+            2000,
+            2025
+          ],
+          "setSeason": "ALL",
+          "setProjection": "globe",
+          "flyTo": {
+            "lon": -61.25,
+            "lat": -3.75,
+            "zoom": 3.8,
+            "pitch": 25
+          }
+        },
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7000
+      },
+      {
+        "id": "case_amz_02_signal",
+        "title": "Precipitation Trajectory",
+        "text": "Over twenty-five years, monthly rainfall anomalies show a steep drying slope of -11.96 millimeters per month per decade. An anomaly is a departure from the long-term seasonal average, while a trend measures the steady rate of change over time.",
+        "audio": "audio/en/case_amz_02_signal.mp3",
+        "target": "#chart-timeseries",
+        "action": {},
+        "highlightStyle": "spotlight",
+        "durationFallbackMs": 8500
+      },
+      {
+        "id": "case_amz_03_significance",
+        "title": "Statistical Significance",
+        "text": "The autocorrelation-aware p-value is 0.0194. A p-value is the probability that random chance produced this pattern. Because p is under zero point zero five, statisticians classify this full-record trend as significant.",
+        "audio": "audio/en/case_amz_03_significance.mp3",
+        "target": "#val-phr",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 8000
+      },
+      {
+        "id": "case_amz_04_ci",
+        "title": "Confidence Interval",
+        "text": "The ninety-five percent confidence interval ranges from -22.15 to -1.75 millimeters per decade. A confidence interval gives the estimated range that holds the true underlying rate with ninety-five percent certainty.",
+        "audio": "audio/en/case_amz_04_ci.mp3",
+        "target": "#verdict-ci-range-bar",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 8000
+      },
+      {
+        "id": "case_amz_05_break",
+        "title": "The 2014 Sensor Transition",
+        "text": "In early twenty-fourteen, NASA transitioned primary satellites from TRMM to GPM. A step change is an abrupt jump in the data baseline. Before twenty-fourteen the slope was weakly positive, but afterwards it flipped deeply negative.",
+        "audio": "audio/en/case_amz_05_break.mp3",
+        "target": "#verdict-caution-box",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 8500
+      },
+      {
+        "id": "case_amz_06_agreement",
+        "title": "Cross-Dataset Agreement",
+        "text": "Independent GLDAS reanalysis also shows sharp post-twenty-fourteen drying. However, neither sub-period is statistically significant on its own, showing how sensitive trend estimates can be to the observation window.",
+        "audio": "audio/en/case_amz_06_agreement.mp3",
+        "target": "#lineup-card",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 8000
+      },
+      {
+        "id": "case_amz_07_caution",
+        "title": "What This Does Not Mean",
+        "text": "Crucially, a mathematical trend does not establish physical causation. This signal is not proven to be caused exclusively by local deforestation; historic El Ni\u00f1o drought episodes in twenty-fifteen and twenty-twenty-three heavily shape this record.",
+        "audio": "audio/en/case_amz_07_caution.mp3",
+        "target": "#verdict-caution-box",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 8500
+      }
+    ]
+  },
+  "case_sahel": {
+    "id": "case_sahel",
+    "title": "Sahel Corridor: Greening Recovery Debate",
+    "description": "Examine whether rainfall recovery in the African Sahel reaches true statistical significance.",
+    "steps": [
+      {
+        "id": "case_shl_01_flyto",
+        "title": "African Sahel: The Greening Debate",
+        "text": "We shift our focus to the African Sahel corridor, a semi-arid zone between the Sahara desert and tropical savannas that experienced historic twentieth-century droughts.",
+        "audio": "audio/en/case_shl_01_flyto.mp3",
+        "target": {
+          "type": "map_coord",
+          "lng": 13.75,
+          "lat": 13.75
+        },
+        "action": {
+          "setVar": "gpm_precip",
+          "setMode": "point",
+          "setPeriod": [
+            2000,
+            2025
+          ],
+          "setSeason": "ALL",
+          "setProjection": "globe",
+          "flyTo": {
+            "lon": 13.75,
+            "lat": 13.75,
+            "zoom": 3.8,
+            "pitch": 25
+          }
+        },
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7500
+      },
+      {
+        "id": "case_shl_02_imerg_trend",
+        "title": "Modest IMERG Upward Slope",
+        "text": "IMERG satellite precipitation indicates a modest upward slope of 0.32 millimeters per month per decade. Popular stories often describe this as a permanent greening recovery.",
+        "audio": "audio/en/case_shl_02_imerg_trend.mp3",
+        "target": "#chart-timeseries",
+        "action": {},
+        "highlightStyle": "spotlight",
+        "durationFallbackMs": 7500
+      },
+      {
+        "id": "case_shl_03_not_sig",
+        "title": "Not Yet Significant",
+        "text": "When we adjust for temporal autocorrelation, the p-value is 0.36. Because p is well above zero point zero five, this result is not yet statistically significant; random year-to-year swings readily explain it.",
+        "audio": "audio/en/case_shl_03_not_sig.mp3",
+        "target": "#verdict-status-pill",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 8000
+      },
+      {
+        "id": "case_shl_04_clock",
+        "title": "Detectability Window",
+        "text": "The Detectability Clock indicates that rainfall noise across the Sahel is so high that more than twenty-five years of observation are required before a subtle trend can be confirmed.",
+        "audio": "audio/en/case_shl_04_clock.mp3",
+        "target": "#detectability-card",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7500
+      },
+      {
+        "id": "case_shl_05_disagreement",
+        "title": "Dataset Disagreement",
+        "text": "By contrast, GLDAS reanalysis estimates a steeper rate of 0.73 millimeters per month per decade, which reaches statistical significance at p equals 0.02. Disagreements between models and satellites urge caution.",
+        "audio": "audio/en/case_shl_05_disagreement.mp3",
+        "target": "#lineup-card",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 8500
+      },
+      {
+        "id": "case_shl_06_caution",
+        "title": "What This Does Not Mean",
+        "text": "What this does not mean: a modest positive trend is not proven to be a permanent climate recovery; severe annual precipitation deficits still occur regularly across the Sahel.",
+        "audio": "audio/en/case_shl_06_caution.mp3",
+        "target": "#verdict-caution-box",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7500
+      }
+    ]
+  },
+  "case_tibet": {
+    "id": "case_tibet",
+    "title": "Tibetan Plateau: High-Mountain Warming Hotspot",
+    "description": "Explore the rapid, statistically indisputable thermal amplification across High-Mountain Asia.",
+    "steps": [
+      {
+        "id": "case_tbt_01_flyto",
+        "title": "Tibetan Plateau: High-Mountain Warming",
+        "text": "Next, we fly to the high Tibetan Plateau and the Himalayas, known as the Third Pole and the vital water tower of Asia.",
+        "audio": "audio/en/case_tbt_01_flyto.mp3",
+        "target": {
+          "type": "map_coord",
+          "lng": 81.25,
+          "lat": 33.75
+        },
+        "action": {
+          "setVar": "gldas_temp",
+          "setMode": "point",
+          "setPeriod": [
+            2000,
+            2025
+          ],
+          "setSeason": "ALL",
+          "setProjection": "globe",
+          "flyTo": {
+            "lon": 81.25,
+            "lat": 33.75,
+            "zoom": 3.8,
+            "pitch": 30
+          }
+        },
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7000
+      },
+      {
+        "id": "case_tbt_02_signal",
+        "title": "Intense Thermal Amplification",
+        "text": "Two-meter air temperature reveals an intense warming slope of 2.75 degrees Celsius per decade. This represents the strongest sustained thermal signal in the dataset.",
+        "audio": "audio/en/case_tbt_02_signal.mp3",
+        "target": "#val-rate",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7500
+      },
+      {
+        "id": "case_tbt_03_significance",
+        "title": "Decisive Significance",
+        "text": "The autocorrelation-aware p-value is less than zero point zero zero zero one, and it comfortably survives planetary False Discovery Rate control. Chance alone cannot account for this warming.",
+        "audio": "audio/en/case_tbt_03_significance.mp3",
+        "target": "#verdict-fdr-badge",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7500
+      },
+      {
+        "id": "case_tbt_04_ci",
+        "title": "Consistent Confidence Interval",
+        "text": "The ninety-five percent confidence interval spans from 2.12 to 3.37 degrees Celsius per decade. Both bounds remain deeply positive.",
+        "audio": "audio/en/case_tbt_04_ci.mp3",
+        "target": "#verdict-ci-range-bar",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7000
+      },
+      {
+        "id": "case_tbt_05_clock",
+        "title": "Rapid Emergence",
+        "text": "The Detectability Clock shows this thermal signal was already detectable after just five years of observation, reflecting the high signal-to-noise ratio of high-altitude warming.",
+        "audio": "audio/en/case_tbt_05_clock.mp3",
+        "target": "#detectability-card",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7500
+      },
+      {
+        "id": "case_tbt_06_caution",
+        "title": "What This Does Not Mean",
+        "text": "What this does not mean: regional gridded reanalysis does not capture microclimates in narrow mountain valleys, where local topography and glacier winds create distinct conditions.",
+        "audio": "audio/en/case_tbt_06_caution.mp3",
+        "target": "#verdict-caution-box",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7500
+      }
+    ]
+  },
+  "case_canada": {
+    "id": "case_canada",
+    "title": "Central Canada: Summer Wildfire Smoke Surge",
+    "description": "Unmask how seasonal slicing reveals intense summer smoke trends invisible in full-year averages.",
+    "steps": [
+      {
+        "id": "case_can_01_flyto",
+        "title": "Central Canada: Wildfire Smoke Surge",
+        "text": "Our final case takes us to central Canada's boreal forests, examining MERRA-2 aerosol optical depth from atmospheric wildfire smoke.",
+        "audio": "audio/en/case_can_01_flyto.mp3",
+        "target": {
+          "type": "map_coord",
+          "lng": -106.25,
+          "lat": 53.75
+        },
+        "action": {
+          "setVar": "merra2_aod",
+          "setMode": "point",
+          "setPeriod": [
+            2000,
+            2025
+          ],
+          "setSeason": "ALL",
+          "setProjection": "globe",
+          "flyTo": {
+            "lon": -106.25,
+            "lat": 53.75,
+            "zoom": 3.8,
+            "pitch": 25
+          }
+        },
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7000
+      },
+      {
+        "id": "case_can_02_all_year",
+        "title": "Full-Year Averaging Dilutes the Signal",
+        "text": "Averaged across all twelve calendar months, aerosol optical depth shows only a tiny slope of 0.013 per decade, hiding major fire events beneath winter quiet.",
+        "audio": "audio/en/case_can_02_all_year.mp3",
+        "target": "#chart-timeseries",
+        "action": {},
+        "highlightStyle": "spotlight",
+        "durationFallbackMs": 7500
+      },
+      {
+        "id": "case_can_03_jja_slice",
+        "title": "Seasonal Slicing Unmasks the Surge",
+        "text": "Isolating the summer smoke season of June, July, and August reveals a sharper slope of 0.04 per decade, highlighting the value of seasonal filtering.",
+        "audio": "audio/en/case_can_03_jja_slice.mp3",
+        "target": "#chip-season-jja",
+        "action": {
+          "setSeason": "JJA"
+        },
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7500
+      },
+      {
+        "id": "case_can_04_megafires",
+        "title": "Episodic Megafire Summers",
+        "text": "The trajectory shows massive spikes in twenty-twenty-one, twenty-twenty-three, and twenty-twenty-five, when unprecedented boreal megafires blanketed North America in smoke.",
+        "audio": "audio/en/case_can_04_megafires.mp3",
+        "target": "#chart-timeseries",
+        "action": {},
+        "highlightStyle": "spotlight",
+        "durationFallbackMs": 7500
+      },
+      {
+        "id": "case_can_05_trending",
+        "title": "Trending but Not Yet Significant",
+        "text": "At this individual grid cell, the autocorrelation-aware p-value is 0.09. It is classified as trending but not yet significant at the strict five percent threshold.",
+        "audio": "audio/en/case_can_05_trending.mp3",
+        "target": "#verdict-status-pill",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 7500
+      },
+      {
+        "id": "case_can_06_caution",
+        "title": "What This Does Not Mean",
+        "text": "What this does not mean: wildfire smoke occurs in acute pulses and is not proven to follow a smooth linear progression; intermittent ignition weather drives each extreme season.",
+        "audio": "audio/en/case_can_06_caution.mp3",
+        "target": "#verdict-caution-box",
+        "action": {},
+        "highlightStyle": "ring",
+        "durationFallbackMs": 8000
+      }
+    ]
+  }
+}
