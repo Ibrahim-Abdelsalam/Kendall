@@ -3448,16 +3448,32 @@
     });
 
     window.addEventListener('mouseup', (e) => {
-      if (state.isDrawingRegion && state.drawStartLngLat && canvas) {
-        const rect = canvas.getBoundingClientRect();
-        const unproj = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
-        finishDrawing(unproj);
+      if (state.isDrawingRegion && state.drawStartLngLat) {
+        const mapEl = document.getElementById('map');
+        if (mapEl) {
+          const rect = mapEl.getBoundingClientRect();
+          const unproj = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+          finishDrawing(unproj);
+        } else {
+          finishDrawing(null);
+        }
       }
     });
 
     window.addEventListener('touchend', () => {
       if (state.isDrawingRegion && state.drawStartLngLat) {
         finishDrawing(null);
+      }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (state.isDrawingRegion && state.drawStartLngLat) {
+        const mapEl = document.getElementById('map');
+        if (mapEl) {
+          const rect = mapEl.getBoundingClientRect();
+          const unproj = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+          if (unproj) updateDrawing(unproj);
+        }
       }
     });
 
@@ -3474,26 +3490,32 @@
       handlePointerSelection(e.lngLat.lat, e.lngLat.lng);
     });
 
-    // DOM-level pointer backup on canvas to guarantee stationary clicks work reliably
-    if (canvas) {
+    // DOM-level pointer backup on map element to guarantee stationary clicks work reliably
+    const mapElement = document.getElementById('map') || canvas;
+    if (mapElement) {
       let domDownX = 0;
       let domDownY = 0;
       let domDownTime = 0;
 
-      canvas.addEventListener('pointerdown', (e) => {
+      mapElement.addEventListener('pointerdown', (e) => {
         state.isSpinningIntro = false;
         domDownX = e.clientX;
         domDownY = e.clientY;
         domDownTime = performance.now();
+        if (state.isDrawingRegion) {
+          const rect = mapElement.getBoundingClientRect();
+          const unproj = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+          if (unproj) startDrawing(unproj);
+        }
       }, { passive: true });
 
-      canvas.addEventListener('pointerup', (e) => {
+      mapElement.addEventListener('pointerup', (e) => {
         state.isSpinningIntro = false;
         if (state.isDrawingRegion || state.isMorphing) return;
         const dist = Math.hypot(e.clientX - domDownX, e.clientY - domDownY);
         const elapsed = performance.now() - domDownTime;
-        if (dist <= 8 && elapsed < 500) {
-          const rect = canvas.getBoundingClientRect();
+        if (dist <= 10 && elapsed < 600) {
+          const rect = mapElement.getBoundingClientRect();
           const pt = [e.clientX - rect.left, e.clientY - rect.top];
           const unproj = map.unproject(pt);
           if (unproj) {

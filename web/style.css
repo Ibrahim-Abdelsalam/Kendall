@@ -170,7 +170,16 @@ button, input, select {
   touch-action: none;
 }
 
+.maplibregl-canvas-container {
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute !important;
+  inset: 0 !important;
+}
+
 .maplibregl-canvas {
+  width: 100% !important;
+  height: 100% !important;
   outline: none !important;
   touch-action: none;
 }
