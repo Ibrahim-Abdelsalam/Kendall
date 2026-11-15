@@ -50,7 +50,7 @@
   <!-- TopoJSON Client for Offline/Fallback Coastline Basemap -->
   <script src="topojson-client.min.js"></script>
   
-  <link rel="stylesheet" href="style.css?v=3.2">
+  <link rel="stylesheet" href="style.css?v=5.0">
   <style>
     #map-container, #map, .maplibregl-canvas-container, .maplibregl-canvas {
       width: 100% !important;
@@ -186,7 +186,22 @@
         </div>
       </div>
 
+      <!-- Narrated Tour Trigger: Guide Me -->
+      <button class="case-tour-trigger guide-me-btn" id="btn-guide-me" title="Launch narrated interactive tour">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/>
+          <polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/>
+        </svg>
+        <span>Guide Me</span>
+      </button>
 
+      <div class="case-tour-trigger" id="btn-start-tour" title="Launch guided detective tour">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        <span>Case Files</span>
+      </div>
     </div>
 
     <div class="hud-header-right">
@@ -693,11 +708,202 @@
           <span>Start Investigating</span>
           <svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
         </button>
+        <button class="btn-ghost" id="btn-intro-tour">
+          <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg>
+          <span>Quick Guided Tour (90s)</span>
+        </button>
       </div>
 
       <div class="intro-keys-hint">
         <span>Shortcuts: <strong>G</strong> Toggle Flat/Globe &bull; <strong>&larr; &rarr;</strong> Switch Variable &bull; <strong>Space</strong> Play/Pause &bull; <strong>?</strong> All Shortcuts</span>
       </div>
+    </div>
+  </div>
+
+  <!-- First-Visit Guided Tour Invitation Modal -->
+  <div class="modal-overlay hidden" id="modal-first-visit" role="dialog" aria-modal="true" aria-labelledby="first-visit-title">
+    <div class="modal-card first-visit-card">
+      <div class="first-visit-icon">
+        <svg class="brand-logo-svg" viewBox="0 0 512 512" width="48" height="48" fill="none">
+          <circle cx="256" cy="256" r="176" fill="#060C18" stroke="#16294C" stroke-width="12" />
+          <line x1="80" y1="256" x2="432" y2="256" stroke="#16294C" stroke-width="4" stroke-dasharray="8 8" />
+          <ellipse cx="256" cy="256" rx="88" ry="176" stroke="#16294C" stroke-width="4" stroke-dasharray="8 8" />
+          <line x1="132" y1="308" x2="256" y2="204" stroke="#22D3EE" stroke-width="36" stroke-linecap="round" />
+          <line x1="256" y1="204" x2="380" y2="308" stroke="#FF6B35" stroke-width="36" stroke-linecap="round" />
+          <circle cx="256" cy="204" r="22" fill="#22D3EE" opacity="0.6" />
+          <circle cx="256" cy="204" r="14" fill="#FFFFFF" />
+        </svg>
+      </div>
+      <h3 class="modal-title" id="first-visit-title">WELCOME TO KENDALL</h3>
+      <p class="first-visit-subtitle">25 Years of Planetary Climate Observations &bull; Mann-Kendall Verification</p>
+      <p class="first-visit-desc">
+        Welcome aboard! We are honored to explore twenty-five years of continuous NASA satellite and reanalysis observations with you. Would you like a 90-second narrated guided tour? Learn how to distinguish genuine multi-decadal trends from satellite sensor breaks, adjust for serial autocorrelation, and safeguard against multiple testing.
+      </p>
+      <div class="first-visit-actions">
+        <button class="btn-primary" id="btn-first-visit-tour">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="6 4 18 12 6 20 6 4"/></svg>
+          <span>Take the Tour (90s)</span>
+        </button>
+        <button class="btn-ghost" id="btn-first-visit-dismiss">Explore on My Own</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Respectful Tour Completion Modal -->
+  <div class="modal-overlay hidden" id="modal-tour-complete" role="dialog" aria-modal="true" aria-labelledby="tour-complete-title">
+    <div class="modal-card tour-complete-card">
+      <div class="tour-complete-icon">
+        <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="#22D3EE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <path d="m9 12 2 2 4-4" />
+        </svg>
+      </div>
+      <h3 class="modal-title" id="tour-complete-title">THANK YOU FOR EXPLORING</h3>
+      <p class="tour-complete-subtitle font-mono">Mission Briefing Complete &bull; Kendall Open Science</p>
+      <p class="tour-complete-body">
+        True scientific discovery comes from questioning assumptions, honoring empirical data, and staying humble before the complexities of our living Earth.
+      </p>
+      <div class="tour-complete-quote">
+        <span class="quote-text">&ldquo;Stay curious. Question the noise, and find the trends that are real.&rdquo;</span>
+      </div>
+      <div class="tour-complete-actions">
+        <button class="btn-primary" id="btn-tour-complete-close">
+          <span>Explore Earth On Your Own</span>
+          <svg class="icon-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tour Welcome Toast (Slides in gently when a tour begins) -->
+  <div class="tour-welcome-toast hidden" id="tour-welcome-toast" role="status" aria-live="polite">
+    <span class="welcome-toast-icon">✨</span>
+    <span class="welcome-toast-text font-mono" id="tour-welcome-toast-text">Welcome to Kendall! Guided tour initiated.</span>
+  </div>
+
+  <!-- Tour Highlighting Overlay (Dims background, cuts out target, tracks map/chart targets) -->
+  <div class="tour-highlight-overlay hidden" id="tour-highlight-overlay" aria-hidden="true">
+    <svg class="tour-highlight-svg" width="100%" height="100%">
+      <defs>
+        <mask id="tour-cutout-mask">
+          <rect width="100%" height="100%" fill="white" />
+          <rect id="tour-cutout-rect" x="0" y="0" width="0" height="0" rx="8" fill="black" />
+          <circle id="tour-cutout-circle" cx="-9999" cy="-9999" r="0" fill="black" />
+        </mask>
+      </defs>
+      <rect width="100%" height="100%" fill="rgba(6, 12, 24, 0.72)" mask="url(#tour-cutout-mask)" />
+    </svg>
+    <div class="tour-target-ring hidden" id="tour-target-ring"></div>
+    <div class="tour-target-arrow hidden" id="tour-target-arrow">
+      <svg viewBox="0 0 24 24" width="32" height="32" fill="#22D3EE">
+        <path d="M12 22L4 10h5V2h6v8h5L12 22z"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Manual Map Interaction "Resume Tour" Chip -->
+  <div class="tour-resume-chip hidden" id="tour-resume-chip">
+    <span class="pulse-dot"></span>
+    <span class="resume-chip-text font-mono">Tour paused &bull; Map moved</span>
+    <button class="btn-sm btn-primary" id="btn-resume-tour">Resume Tour</button>
+  </div>
+
+  <!-- Floating Narrated Tour Controller -->
+  <div class="tour-floating-controller hidden" id="tour-controller" role="region" aria-label="Guided Tour Controls">
+    <div class="tour-ctrl-top">
+      <div class="tour-ctrl-badge font-mono" id="tour-ctrl-badge">STEP 1 OF 14</div>
+      <div class="tour-ctrl-title font-mono" id="tour-ctrl-title">Welcome to Kendall</div>
+      <button class="tour-ctrl-close" id="btn-tour-ctrl-close" title="Exit Tour (Esc)" aria-label="Close Tour">&times;</button>
+    </div>
+
+    <!-- Captions Box (ON by default, above bottom sheet on phones, never covers target) -->
+    <div class="tour-captions-box" id="tour-captions-box" aria-live="polite">
+      <div class="tour-captions-text" id="tour-captions-text"></div>
+      <div class="tour-captions-note hidden" id="tour-captions-note"></div>
+      <div class="tour-step-actions hidden" id="tour-step-actions"></div>
+    </div>
+
+    <!-- Autoplay Blocked Banner -->
+    <div class="tour-autoplay-prompt hidden" id="tour-autoplay-prompt">
+      <span class="autoplay-prompt-icon">🔇</span>
+      <span class="autoplay-prompt-text">Audio muted by browser autoplay policy</span>
+      <button class="btn-sm btn-primary" id="btn-tour-enable-sound">Tap to enable sound</button>
+    </div>
+
+    <div class="tour-ctrl-bottom">
+      <div class="tour-dots-wrapper" id="tour-ctrl-dots">
+        <!-- Dots injected dynamically -->
+      </div>
+
+      <div class="tour-buttons-group">
+        <!-- Prev Step -->
+        <button class="tour-btn-icon" id="btn-tour-ctrl-prev" title="Previous Step (&larr;)" aria-label="Previous Step">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+
+        <!-- Play / Pause -->
+        <button class="tour-btn-icon btn-play-pause" id="btn-tour-ctrl-play-pause" title="Play / Pause (Space)" aria-label="Play / Pause">
+          <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          <svg class="icon-play hidden" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 18 12 6 20 6 4"/></svg>
+        </button>
+
+        <!-- Next Step -->
+        <button class="tour-btn-icon" id="btn-tour-ctrl-next" title="Next Step (&rarr;)" aria-label="Next Step">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+
+        <!-- Speed Dropdown Menu (0.75x to 1.5x) -->
+        <div class="tour-speed-menu">
+          <button class="tour-btn-text font-mono" id="btn-tour-speed" title="Speech speed" aria-haspopup="true">1.0&times;</button>
+          <div class="tour-speed-dropdown hidden" id="tour-speed-dropdown" role="menu">
+            <button class="speed-opt" data-speed="0.75">0.75&times;</button>
+            <button class="speed-opt active" data-speed="1.0">1.0&times;</button>
+            <button class="speed-opt" data-speed="1.25">1.25&times;</button>
+            <button class="speed-opt" data-speed="1.5">1.5&times;</button>
+          </div>
+        </div>
+
+        <!-- Mute Toggle -->
+        <button class="tour-btn-icon" id="btn-tour-ctrl-mute" title="Mute / Unmute" aria-label="Toggle Mute">
+          <svg class="icon-unmuted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+          </svg>
+          <svg class="icon-muted hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"/>
+            <line x1="23" y1="9" x2="17" y2="15"/>
+            <line x1="17" y1="9" x2="23" y2="15"/>
+          </svg>
+        </button>
+
+        <!-- Captions Toggle (CC) -->
+        <button class="tour-btn-text active font-mono" id="btn-tour-ctrl-captions" title="Toggle Captions" aria-label="Toggle Captions">CC</button>
+
+        <!-- Skip / End -->
+        <button class="tour-btn-ghost font-mono" id="btn-tour-ctrl-skip">Skip</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Guided Tour Narrative Card (Legacy Case Files overlay, synced with TourEngine) -->
+  <div class="tour-card hidden" id="tour-card">
+    <div class="tour-header">
+      <span class="tour-step-pill" id="tour-step-pill">CASE 1 OF 4</span>
+      <button class="tour-close-btn" id="btn-close-tour" title="Exit Tour (Échap)">&times;</button>
+    </div>
+    <h3 class="tour-title" id="tour-title">Amazon Basin: Genuine Drought or Sensor Discontinuity?</h3>
+    <p class="tour-body" id="tour-body">
+      A massive drying signal of &minus;9.27 mm/month/decade dominates the Amazon. Yet the trend flips from positive under TRMM (+5.38 mm) to deeply negative under GPM (&minus;23.29 mm) across the 2014 transition. Is this a step change in instruments or an intensified real drought?
+    </p>
+    <div class="tour-nav-row">
+      <button class="btn-sm btn-ghost" id="btn-tour-prev">&larr; Previous</button>
+      <div class="tour-dots" id="tour-dots">
+        <span class="tour-dot active"></span>
+        <span class="tour-dot"></span>
+        <span class="tour-dot"></span>
+        <span class="tour-dot"></span>
+      </div>
+      <button class="btn-sm btn-primary" id="btn-tour-next">Next Case &rarr;</button>
     </div>
   </div>
 
@@ -718,6 +924,7 @@
         <div class="shortcut-row"><kbd>&larr;</kbd> <kbd>&rarr;</kbd> <span>Previous / Next Planetary Variable</span></div>
         <div class="shortcut-row"><kbd>Space</kbd> <span>Play / Pause Monthly Anomaly Scrubber</span></div>
         <div class="shortcut-row"><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> <span>Jump to Case Files (Amazon, Sahel, Tibet, Canada)</span></div>
+        <div class="shortcut-row"><kbd>T</kbd> <span>Toggle Guided Story Tour</span></div>
         <div class="shortcut-row"><kbd>O</kbd> <span>Toggle Opposite Twins Mode</span></div>
         <div class="shortcut-row"><kbd>S</kbd> <span>Toggle Isolated Speckle Filter</span></div>
         <div class="shortcut-row"><kbd>B</kbd> <span>Replay Computer Boot &amp; Glitch Effect</span></div>
@@ -775,6 +982,6 @@
     <span class="sheet-toggle-text">Inspector &bull; Tap to Expand</span>
   </button>
 
-  <script src="app.js?v=3.0"></script>
+  <script src="app.js?v=5.0"></script>
 </body>
 </html>
