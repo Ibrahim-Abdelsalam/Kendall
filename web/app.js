@@ -448,6 +448,9 @@
         scrollZoom: true,
       });
 
+      state.map = map;
+      setupMapInteraction(map);
+
       // Explicitly disable touch pitch (tilt must not trigger on two-finger gestures)
       if (map.touchPitch) {
         map.touchPitch.disable();
@@ -624,6 +627,7 @@
       map.on('load', () => {
         mapLoaded = true;
         state.map = map;
+        setupMapInteraction(map);
 
         const dummyCanvas = document.createElement('canvas');
         dummyCanvas.width = 2;
@@ -1178,6 +1182,7 @@
   function toggleDrawRegion(forceState) {
     const shouldDraw = forceState !== undefined ? forceState : !state.isDrawingRegion;
     state.isDrawingRegion = shouldDraw;
+    state.isSpinningIntro = false;
 
     const banner = document.getElementById('draw-mode-banner');
     const btnDraw = document.getElementById('btn-draw-region');
@@ -1192,14 +1197,18 @@
         setSelectionMode('region');
       }
       if (state.map) {
-        state.map.dragPan.disable();
-        state.map.touchZoomRotate.disable();
+        if (state.map.dragPan) state.map.dragPan.disable();
+        if (state.map.touchZoomRotate) state.map.touchZoomRotate.disable();
+        if (state.map.boxZoom) state.map.boxZoom.disable();
+        if (state.map.doubleClickZoom) state.map.doubleClickZoom.disable();
       }
     } else {
       state.drawStartLngLat = null;
       if (state.map) {
-        state.map.dragPan.enable();
-        state.map.touchZoomRotate.enable();
+        if (state.map.dragPan) state.map.dragPan.enable();
+        if (state.map.touchZoomRotate) state.map.touchZoomRotate.enable();
+        if (state.map.boxZoom) state.map.boxZoom.enable();
+        if (state.map.doubleClickZoom) state.map.doubleClickZoom.enable();
       }
     }
   }
@@ -3268,6 +3277,233 @@
     });
   }
 
+  // --- Map Interaction & Pin Placement Engine ---
+  function setupMapInteraction(map) {
+    if (!map || map._kendallInteractionSetup) return;
+    map._kendallInteractionSetup = true;
+
+    const tooltip = document.getElementById('hover-tooltip');
+    const crosshair = document.getElementById('map-crosshair');
+    const canvas = map.getCanvas ? map.getCanvas() : null;
+
+    let lastSelectionTime = 0;
+
+    // Core point selector (places pin, eases camera, updates inspector)
+    function handlePointerSelection(lat, lon) {
+      const now = performance.now();
+      if (now - lastSelectionTime < 120) return;
+      lastSelectionTime = now;
+
+      state.isSpinningIntro = false;
+      if (state.isDrawingRegion || state.isMorphing) return;
+      if (typeof lat !== 'number' || typeof lon !== 'number' || isNaN(lat) || isNaN(lon)) return;
+
+      selectPoint(lat, lon);
+      const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      map.easeTo({ center: [state.currentPin.lon, state.currentPin.lat], duration: prefersReduced ? 0 : 600 });
+    }
+
+    // Core region drawing helpers
+    function startDrawing(lngLat) {
+      if (!lngLat) return;
+      state.isSpinningIntro = false;
+      state.drawStartLngLat = {
+        lat: Math.max(-60, Math.min(60, lngLat.lat)),
+        lng: Math.max(-180, Math.min(180, lngLat.lng)),
+      };
+      state.regionBbox = {
+        s: state.drawStartLngLat.lat,
+        n: state.drawStartLngLat.lat,
+        w: state.drawStartLngLat.lng,
+        e: state.drawStartLngLat.lng,
+      };
+      updateRegionGeoJson();
+    }
+
+    function updateDrawing(lngLat) {
+      if (!state.isDrawingRegion || !state.drawStartLngLat || !lngLat) return;
+      const curLat = Math.max(-60, Math.min(60, lngLat.lat));
+      const curLng = Math.max(-180, Math.min(180, lngLat.lng));
+      state.regionBbox = {
+        s: Math.min(state.drawStartLngLat.lat, curLat),
+        n: Math.max(state.drawStartLngLat.lat, curLat),
+        w: Math.min(state.drawStartLngLat.lng, curLng),
+        e: Math.max(state.drawStartLngLat.lng, curLng),
+      };
+      updateRegionGeoJson();
+      syncBboxInputs();
+    }
+
+    function finishDrawing(endLngLat) {
+      if (!state.isDrawingRegion || !state.drawStartLngLat) return;
+      let curLat = endLngLat ? Math.max(-60, Math.min(60, endLngLat.lat)) : (state.regionBbox ? state.regionBbox.n : state.drawStartLngLat.lat);
+      let curLng = endLngLat ? Math.max(-180, Math.min(180, endLngLat.lng)) : (state.regionBbox ? state.regionBbox.e : state.drawStartLngLat.lng);
+
+      let s = Math.min(state.drawStartLngLat.lat, curLat);
+      let n = Math.max(state.drawStartLngLat.lat, curLat);
+      let w = Math.min(state.drawStartLngLat.lng, curLng);
+      let e = Math.max(state.drawStartLngLat.lng, curLng);
+
+      // If drawn box is smaller than 1.0 degree in either dimension (single click or tiny tap),
+      // snap to a 5x5 degree box centered around the click point so single-click drawing works intuitively
+      if (Math.abs(n - s) < 1.0 || Math.abs(e - w) < 1.0) {
+        const centerLat = (n + s) / 2;
+        const centerLng = (e + w) / 2;
+        s = Math.max(-60, centerLat - 2.5);
+        n = Math.min(60, centerLat + 2.5);
+        w = Math.max(-180, centerLng - 2.5);
+        e = Math.min(180, centerLng + 2.5);
+      }
+
+      state.regionBbox = { s, n, w, e };
+      state.drawStartLngLat = null;
+      toggleDrawRegion(false);
+      updateRegionGeoJson();
+      syncBboxInputs();
+      recordAnalysisChoice();
+      updateInspector();
+    }
+
+    // Stop intro spin on any map interaction
+    map.on('dragstart', () => { state.isSpinningIntro = false; });
+    map.on('zoomstart', () => { state.isSpinningIntro = false; });
+    map.on('pitchstart', () => { state.isSpinningIntro = false; });
+
+    map.on('mousedown', (e) => {
+      state.isSpinningIntro = false;
+      if (state.isDrawingRegion && e.lngLat) {
+        startDrawing(e.lngLat);
+      }
+    });
+
+    map.on('touchstart', (e) => {
+      state.isSpinningIntro = false;
+      if (state.isDrawingRegion) {
+        if (e.touches && e.touches.length === 1 && canvas) {
+          const rect = canvas.getBoundingClientRect();
+          const unproj = map.unproject([e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top]);
+          if (unproj) startDrawing(unproj);
+        }
+      }
+    });
+
+    map.on('mousemove', (e) => {
+      if (!e.lngLat) {
+        if (tooltip) tooltip.classList.add('hidden');
+        if (crosshair) crosshair.classList.add('crosshair-hidden');
+        return;
+      }
+
+      if (state.isDrawingRegion && state.drawStartLngLat) {
+        updateDrawing(e.lngLat);
+        return;
+      }
+
+      const snap = snapCoordsToGrid(e.lngLat.lat, e.lngLat.lng);
+      const varData = state.cache[state.currentVarId];
+      if (!varData) return;
+
+      const rawSlope = varData.trend.slopes[snap.latIdx][snap.lonIdx];
+      const isValid = varData.trend.valid[snap.latIdx][snap.lonIdx] === 1;
+
+      if (tooltip && isValid && rawSlope !== -32768) {
+        const slope = rawSlope * (varData.trend.slope_scale || 1.0);
+        const pVal = varData.trend.p_values ? varData.trend.p_values[snap.latIdx][snap.lonIdx] / 10000 : 0.05;
+        const isSig = varData.trend.significant_fdr[snap.latIdx][snap.lonIdx] === 1;
+
+        document.getElementById('tt-coords').textContent = `${snap.snappedLat.toFixed(2)}°, ${snap.snappedLon.toFixed(2)}°`;
+        document.getElementById('tt-rate').textContent = (slope > 0 ? '+' : '') + slope.toFixed(2);
+        document.getElementById('tt-phr').textContent = pVal.toFixed(3);
+        const ttStatus = document.getElementById('tt-status');
+        ttStatus.textContent = isSig ? 'SIGNIFICANT' : 'NO TREND';
+        ttStatus.style.color = isSig ? 'var(--green-sig)' : 'var(--text-secondary)';
+        ttStatus.style.background = isSig ? 'rgba(52, 211, 153, 0.15)' : 'rgba(160, 178, 198, 0.15)';
+
+        tooltip.style.left = `${e.point.x + 14}px`;
+        tooltip.style.top = `${e.point.y + 14}px`;
+        tooltip.classList.remove('hidden');
+      } else if (tooltip) {
+        tooltip.classList.add('hidden');
+      }
+
+      if (crosshair) {
+        crosshair.style.left = `${e.point.x}px`;
+        crosshair.style.top = `${e.point.y}px`;
+        crosshair.classList.remove('crosshair-hidden');
+      }
+    });
+
+    map.on('touchmove', (e) => {
+      if (state.isDrawingRegion && state.drawStartLngLat && e.touches && e.touches.length === 1 && canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const unproj = map.unproject([e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top]);
+        if (unproj) updateDrawing(unproj);
+      }
+    });
+
+    map.on('mouseup', (e) => {
+      if (state.isDrawingRegion && state.drawStartLngLat) {
+        finishDrawing(e.lngLat);
+      }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (state.isDrawingRegion && state.drawStartLngLat && canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const unproj = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+        finishDrawing(unproj);
+      }
+    });
+
+    window.addEventListener('touchend', () => {
+      if (state.isDrawingRegion && state.drawStartLngLat) {
+        finishDrawing(null);
+      }
+    });
+
+    map.on('mouseout', () => {
+      if (tooltip) tooltip.classList.add('hidden');
+      if (crosshair) crosshair.classList.add('crosshair-hidden');
+    });
+
+    // Native MapLibre Click handler
+    map.on('click', (e) => {
+      state.isSpinningIntro = false;
+      if (state.isDrawingRegion || state.isMorphing) return;
+      if (!e.lngLat) return;
+      handlePointerSelection(e.lngLat.lat, e.lngLat.lng);
+    });
+
+    // DOM-level pointer backup on canvas to guarantee stationary clicks work reliably
+    if (canvas) {
+      let domDownX = 0;
+      let domDownY = 0;
+      let domDownTime = 0;
+
+      canvas.addEventListener('pointerdown', (e) => {
+        state.isSpinningIntro = false;
+        domDownX = e.clientX;
+        domDownY = e.clientY;
+        domDownTime = performance.now();
+      }, { passive: true });
+
+      canvas.addEventListener('pointerup', (e) => {
+        state.isSpinningIntro = false;
+        if (state.isDrawingRegion || state.isMorphing) return;
+        const dist = Math.hypot(e.clientX - domDownX, e.clientY - domDownY);
+        const elapsed = performance.now() - domDownTime;
+        if (dist <= 8 && elapsed < 500) {
+          const rect = canvas.getBoundingClientRect();
+          const pt = [e.clientX - rect.left, e.clientY - rect.top];
+          const unproj = map.unproject(pt);
+          if (unproj) {
+            handlePointerSelection(unproj.lat, unproj.lng);
+          }
+        }
+      });
+    }
+  }
+
   // --- Setup Event Listeners ---
   function setupListeners() {
     // Global User Interaction Audio Activator (unblocks Web Audio across origin)
@@ -3309,17 +3545,23 @@
       });
     }
 
+    const dismissIntro = () => {
+      bootEngine.finish(true);
+      state.isSpinningIntro = false;
+      const intro = document.getElementById('intro-overlay');
+      if (intro) {
+        intro.style.pointerEvents = 'none';
+        intro.classList.add('hidden');
+      }
+    };
+
     const btnStart = document.getElementById('btn-intro-start');
     if (btnStart) {
-      btnStart.addEventListener('click', () => {
-        bootEngine.finish(true);
-        state.isSpinningIntro = false;
-        const intro = document.getElementById('intro-overlay');
-        if (intro) {
-          intro.style.pointerEvents = 'none';
-          intro.classList.add('hidden');
-        }
-      });
+      btnStart.addEventListener('click', dismissIntro);
+    }
+    const introBackdrop = document.querySelector('.intro-backdrop');
+    if (introBackdrop) {
+      introBackdrop.addEventListener('click', dismissIntro);
     }
 
     // Projection Segmented Toggle Buttons
@@ -3363,205 +3605,8 @@
       btnToggleTilt.addEventListener('click', toggleTilt);
     }
 
-    let pointerDownTime = 0;
-    let pointerDownPos = null;
-    let maxPointerDist = 0;
-    let maxTouchesInGesture = 0;
-    let isGestureActive = false;
-    let lastGestureEndTime = 0;
-
     if (state.map) {
-      const tooltip = document.getElementById('hover-tooltip');
-      const crosshair = document.getElementById('map-crosshair');
-
-      // Pointer down tracking to differentiate pan/tilt/rotation/pinch gestures from stationary single tap
-      state.map.on('mousedown', (e) => {
-        if (state.isDrawingRegion) {
-          state.drawStartLngLat = e.lngLat;
-          return;
-        }
-        pointerDownTime = performance.now();
-        pointerDownPos = { x: e.point.x, y: e.point.y };
-        maxPointerDist = 0;
-        maxTouchesInGesture = 1;
-        isGestureActive = false;
-      });
-
-      state.map.on('touchstart', (e) => {
-        if (state.isDrawingRegion) {
-          if (e.touches && e.touches.length === 1) {
-            const rect = document.getElementById('map-container').getBoundingClientRect();
-            const unproj = state.map.unproject([e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top]);
-            state.drawStartLngLat = unproj;
-          }
-          return;
-        }
-        pointerDownTime = performance.now();
-        const currentTouchCount = e.touches ? e.touches.length : 1;
-        if (currentTouchCount === 1) {
-          maxTouchesInGesture = 1;
-          pointerDownPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-          isGestureActive = false;
-        } else {
-          maxTouchesInGesture = Math.max(maxTouchesInGesture, currentTouchCount);
-          pointerDownPos = null;
-          isGestureActive = true;
-        }
-        maxPointerDist = 0;
-      });
-
-      state.map.on('mousemove', (e) => {
-        if (state.isDrawingRegion && state.drawStartLngLat) {
-          const curLat = Math.max(-60, Math.min(60, e.lngLat.lat));
-          const curLng = Math.max(-180, Math.min(180, e.lngLat.lng));
-          state.regionBbox = {
-            s: Math.min(state.drawStartLngLat.lat, curLat),
-            n: Math.max(state.drawStartLngLat.lat, curLat),
-            w: Math.min(state.drawStartLngLat.lng, curLng),
-            e: Math.max(state.drawStartLngLat.lng, curLng),
-          };
-          updateRegionGeoJson();
-          syncBboxInputs();
-          return;
-        }
-
-        if (pointerDownPos && e.originalEvent && e.originalEvent.buttons > 0) {
-          const dist = Math.hypot(e.point.x - pointerDownPos.x, e.point.y - pointerDownPos.y);
-          if (dist > maxPointerDist) maxPointerDist = dist;
-          if (dist >= 6) isGestureActive = true;
-        }
-
-        const snap = snapCoordsToGrid(e.lngLat.lat, e.lngLat.lng);
-        const varData = state.cache[state.currentVarId];
-        if (!varData) return;
-
-        const rawSlope = varData.trend.slopes[snap.latIdx][snap.lonIdx];
-        const isValid = varData.trend.valid[snap.latIdx][snap.lonIdx] === 1;
-
-        if (tooltip && isValid && rawSlope !== -32768) {
-          const slope = rawSlope * (varData.trend.slope_scale || 1.0);
-          const pVal = varData.trend.p_values ? varData.trend.p_values[snap.latIdx][snap.lonIdx] / 10000 : 0.05;
-          const isSig = varData.trend.significant_fdr[snap.latIdx][snap.lonIdx] === 1;
-
-          document.getElementById('tt-coords').textContent = `${snap.snappedLat.toFixed(2)}°, ${snap.snappedLon.toFixed(2)}°`;
-          document.getElementById('tt-rate').textContent = (slope > 0 ? '+' : '') + slope.toFixed(2);
-          document.getElementById('tt-phr').textContent = pVal.toFixed(3);
-          const ttStatus = document.getElementById('tt-status');
-          ttStatus.textContent = isSig ? 'SIGNIFICANT' : 'NO TREND';
-          ttStatus.style.color = isSig ? 'var(--green-sig)' : 'var(--text-secondary)';
-          ttStatus.style.background = isSig ? 'rgba(52, 211, 153, 0.15)' : 'rgba(160, 178, 198, 0.15)';
-
-          tooltip.style.left = `${e.point.x + 14}px`;
-          tooltip.style.top = `${e.point.y + 14}px`;
-          tooltip.classList.remove('hidden');
-        } else if (tooltip) {
-          tooltip.classList.add('hidden');
-        }
-
-        if (crosshair) {
-          crosshair.style.left = `${e.point.x}px`;
-          crosshair.style.top = `${e.point.y}px`;
-          crosshair.classList.remove('crosshair-hidden');
-        }
-      });
-
-      state.map.on('mouseup', (e) => {
-        if (state.isDrawingRegion && state.drawStartLngLat) {
-          const curLat = Math.max(-60, Math.min(60, e.lngLat.lat));
-          const curLng = Math.max(-180, Math.min(180, e.lngLat.lng));
-          state.regionBbox = {
-            s: Math.min(state.drawStartLngLat.lat, curLat),
-            n: Math.max(state.drawStartLngLat.lat, curLat),
-            w: Math.min(state.drawStartLngLat.lng, curLng),
-            e: Math.max(state.drawStartLngLat.lng, curLng),
-          };
-          toggleDrawRegion(false);
-          syncBboxInputs();
-          recordAnalysisChoice();
-          updateInspector();
-        }
-      });
-
-      state.map.on('touchmove', (e) => {
-        if (state.isDrawingRegion && state.drawStartLngLat && e.touches && e.touches.length === 1) {
-          const rect = document.getElementById('map-container').getBoundingClientRect();
-          const unproj = state.map.unproject([e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top]);
-          const curLat = Math.max(-60, Math.min(60, unproj.lat));
-          const curLng = Math.max(-180, Math.min(180, unproj.lng));
-          state.regionBbox = {
-            s: Math.min(state.drawStartLngLat.lat, curLat),
-            n: Math.max(state.drawStartLngLat.lat, curLat),
-            w: Math.min(state.drawStartLngLat.lng, curLng),
-            e: Math.max(state.drawStartLngLat.lng, curLng),
-          };
-          updateRegionGeoJson();
-          syncBboxInputs();
-          return;
-        }
-
-        if (e.touches && e.touches.length > 1) {
-          maxTouchesInGesture = Math.max(maxTouchesInGesture, e.touches.length);
-          isGestureActive = true;
-        } else if (pointerDownPos && e.touches && e.touches.length > 0) {
-          const dist = Math.hypot(e.touches[0].clientX - pointerDownPos.x, e.touches[0].clientY - pointerDownPos.y);
-          if (dist > maxPointerDist) maxPointerDist = dist;
-          if (dist >= 6) isGestureActive = true;
-        }
-      });
-
-      state.map.on('dragstart', () => { isGestureActive = true; });
-      state.map.on('rotatestart', () => { isGestureActive = true; });
-      state.map.on('pitchstart', () => { isGestureActive = true; });
-      state.map.on('zoomstart', () => { isGestureActive = true; });
-
-      state.map.on('dragend', () => { lastGestureEndTime = performance.now(); });
-      state.map.on('rotateend', () => { lastGestureEndTime = performance.now(); });
-      state.map.on('pitchend', () => { lastGestureEndTime = performance.now(); });
-      state.map.on('zoomend', () => { lastGestureEndTime = performance.now(); });
-
-      state.map.on('mouseout', () => {
-        if (tooltip) tooltip.classList.add('hidden');
-        if (crosshair) crosshair.classList.add('crosshair-hidden');
-      });
-
-      // Strict stationary single-tap pin placement (< 6px movement, < 400ms duration, no multi-touch/gesture)
-      state.map.on('click', (e) => {
-        if (state.isDrawingRegion || state.selectionMode === 'region') {
-          return;
-        }
-
-        const now = performance.now();
-        const duration = now - pointerDownTime;
-        const timeSinceGesture = now - lastGestureEndTime;
-
-        if (
-          state.isMorphing ||
-          isGestureActive ||
-          maxTouchesInGesture > 1 ||
-          maxPointerDist >= 6 ||
-          duration >= 400 ||
-          timeSinceGesture < 250
-        ) {
-          isGestureActive = false;
-          maxTouchesInGesture = 0;
-          maxPointerDist = 0;
-          return;
-        }
-
-        const snap = snapCoordsToGrid(e.lngLat.lat, e.lngLat.lng);
-        state.cellIndex = snap;
-        state.currentPin = { lat: snap.snappedLat, lon: snap.snappedLon };
-        dropPinMarker(snap.snappedLat, snap.snappedLon);
-        const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        state.map.easeTo({ center: [snap.snappedLon, snap.snappedLat], duration: prefersReduced ? 0 : 600 });
-        recordAnalysisChoice();
-        updateInspector(snap.latIdx, snap.lonIdx);
-
-        // Reset tracking
-        maxTouchesInGesture = 0;
-        maxPointerDist = 0;
-        isGestureActive = false;
-      });
+      setupMapInteraction(state.map);
     }
 
     // Selection Mode Toggle Buttons
@@ -3882,9 +3927,9 @@
       const introEl = document.getElementById('intro-overlay');
       const isIntroVisible = introEl && !introEl.classList.contains('hidden');
       if (isIntroVisible) {
-        if (e.code === 'Enter') {
+        if (e.code === 'Enter' || e.code === 'Space' || e.key === 'Escape') {
           e.preventDefault();
-          document.getElementById('btn-intro-start')?.click();
+          dismissIntro();
         } else if (e.code === 'KeyB' || e.key.toLowerCase() === 'b') {
           e.preventDefault();
           bootEngine.start(true);
