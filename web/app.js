@@ -430,6 +430,7 @@
 
       const map = new maplibregl.Map({
         container: 'map',
+        clickTolerance: 16,
         style: cartoStyleUrl,
         center: [0, 20],
         zoom: 1.5,
@@ -3490,40 +3491,75 @@
       handlePointerSelection(e.lngLat.lat, e.lngLat.lng);
     });
 
-    // DOM-level pointer backup on map element to guarantee stationary clicks work reliably
-    const mapElement = document.getElementById('map') || canvas;
-    if (mapElement) {
-      let domDownX = 0;
-      let domDownY = 0;
-      let domDownTime = 0;
+    // --- Window-Level Capture Phase Point Selection & Click Engine ---
+    let ptrDownX = 0;
+    let ptrDownY = 0;
+    let ptrDownTime = 0;
+    let isDownOnMap = false;
 
-      mapElement.addEventListener('pointerdown', (e) => {
+    window.addEventListener('pointerdown', (e) => {
+      const mapEl = document.getElementById('map');
+      if (mapEl && (mapEl.contains(e.target) || e.target.closest('#map, #map-container'))) {
         state.isSpinningIntro = false;
-        domDownX = e.clientX;
-        domDownY = e.clientY;
-        domDownTime = performance.now();
+        ptrDownX = e.clientX;
+        ptrDownY = e.clientY;
+        ptrDownTime = performance.now();
+        isDownOnMap = true;
         if (state.isDrawingRegion) {
-          const rect = mapElement.getBoundingClientRect();
+          const rect = mapEl.getBoundingClientRect();
           const unproj = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
           if (unproj) startDrawing(unproj);
         }
-      }, { passive: true });
+      } else {
+        isDownOnMap = false;
+      }
+    }, { capture: true, passive: true });
 
-      mapElement.addEventListener('pointerup', (e) => {
+    window.addEventListener('pointerup', (e) => {
+      if (!isDownOnMap) return;
+      isDownOnMap = false;
+      state.isSpinningIntro = false;
+      if (state.isDrawingRegion || state.isMorphing) return;
+
+      if (e.target.closest('button, input, a, .region-handle-marker, .preset-item, .looks-popover, #intro-overlay, #boot-overlay, #modal-shortcuts, .header-hud, .inspector-panel, .scrubber-bar, #panel-left, #panel-right')) {
+        return;
+      }
+
+      const mapEl = document.getElementById('map');
+      if (!mapEl) return;
+
+      const dist = Math.hypot(e.clientX - ptrDownX, e.clientY - ptrDownY);
+      const elapsed = performance.now() - ptrDownTime;
+
+      // Allow generous tolerance for trackpad tap (up to 25px travel, up to 900ms duration)
+      if (dist <= 25 && elapsed < 900) {
+        const rect = mapEl.getBoundingClientRect();
+        const pt = [e.clientX - rect.left, e.clientY - rect.top];
+        const unproj = map.unproject(pt);
+        if (unproj && !isNaN(unproj.lat) && !isNaN(unproj.lng)) {
+          handlePointerSelection(unproj.lat, unproj.lng);
+        }
+      }
+    }, { capture: true });
+
+    // Native DOM click listener (standard fallback for all pointing devices)
+    window.addEventListener('click', (e) => {
+      const mapEl = document.getElementById('map');
+      if (!mapEl) return;
+      if (e.target.closest('button, input, a, .region-handle-marker, .preset-item, .looks-popover, #intro-overlay, #boot-overlay, #modal-shortcuts, .header-hud, .inspector-panel, .scrubber-bar, #panel-left, #panel-right')) {
+        return;
+      }
+      if (mapEl.contains(e.target) || e.target.closest('#map, #map-container')) {
         state.isSpinningIntro = false;
         if (state.isDrawingRegion || state.isMorphing) return;
-        const dist = Math.hypot(e.clientX - domDownX, e.clientY - domDownY);
-        const elapsed = performance.now() - domDownTime;
-        if (dist <= 10 && elapsed < 600) {
-          const rect = mapElement.getBoundingClientRect();
-          const pt = [e.clientX - rect.left, e.clientY - rect.top];
-          const unproj = map.unproject(pt);
-          if (unproj) {
-            handlePointerSelection(unproj.lat, unproj.lng);
-          }
+        const rect = mapEl.getBoundingClientRect();
+        const pt = [e.clientX - rect.left, e.clientY - rect.top];
+        const unproj = map.unproject(pt);
+        if (unproj && !isNaN(unproj.lat) && !isNaN(unproj.lng)) {
+          handlePointerSelection(unproj.lat, unproj.lng);
         }
-      });
-    }
+      }
+    }, { capture: true });
   }
 
   // --- Setup Event Listeners ---
@@ -4044,12 +4080,12 @@
   }
 
   function selectPoint(lat, lon) {
-    if (state.selectionMode !== 'point') {
-      setSelectionMode('point');
-    }
     const snap = snapCoordsToGrid(lat, lon);
     state.cellIndex = snap;
     state.currentPin = { lat: snap.snappedLat, lon: snap.snappedLon };
+    if (state.selectionMode !== 'point') {
+      setSelectionMode('point');
+    }
     dropPinMarker(snap.snappedLat, snap.snappedLon);
     recordAnalysisChoice();
     updateInspector(snap.latIdx, snap.lonIdx);
