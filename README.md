@@ -1,4 +1,4 @@
-# 🌍 Kendall: Planetary Climate Trend & Era Shift Detector (2000–2025)
+# Kendall: Planetary Climate Trend & Era Shift Detector (2000–2025)
 
 > **"Find the trends that are real."**  
 > *Named after the Mann-Kendall non-parametric trend test.*  
@@ -12,7 +12,7 @@
 
 ---
 
-## ⚡ Quick Start: Run the App in 5 Seconds
+## Quick Start: Run the App in 5 Seconds
 
 Kendall runs **100% in your browser** with **zero backend servers**, **no database**, and **no API keys**. The entire 25.33-year global dataset (~38.9 MB) loads directly onto your client machine.
 
@@ -34,13 +34,13 @@ make serve
 ```
 
 Then open your browser and navigate to:
-👉 **[http://localhost:8000](http://localhost:8000)**
+**[http://localhost:8000](http://localhost:8000)**
 
 *(Alternative with Node.js: `npx serve web -p 8000`).*
 
 ---
 
-## 🧭 What is Kendall?
+## What is Kendall?
 
 When a farmer suffers three dry summers in a row, or a city faces repeated record rainfall, the critical question is: **"Is our regional climate permanently changing, or is this natural weather variability?"**
 
@@ -53,23 +53,23 @@ Raw climate maps often mislead because:
 
 ---
 
-## 🌟 Mission Control Features
+## Mission Control Features
 
-- **🌐 Interactive 3D Globe & 2D Flat Map**: Smoothly morph between an orthographic 3D WebGL globe and an equirectangular flat map with MapLibre GL.
-- **📍 Point & Custom Region Analysis**: Click any coordinate on Earth or draw a custom bounding polygon to compute instant aggregate trends and area-weighted statistics.
-- **🎯 Clear Statistical Verdicts**:
-  - 🟢 **Significant Trend**: Strong multi-decadal signal verified after Hamed-Rao autocorrelation correction and False Discovery Rate (FDR) control.
-  - 🟡 **Trending, Not Yet Significant**: A visible slope exists, but 25 years of data is not yet sufficient to mathematically rule out chance.
-  - ⚪ **No Trend**: Historical fluctuations remain within expected natural variance.
-- **⏱️ Detectability Clock**: Calculates the exact minimum years of continuous observation required before the regional trend becomes statistically detectable above background noise.
-- **⚠️ 2014 Satellite Sensor Shift Guard**: Flags potential sensor transition artifacts in precipitation data around the 2014 TRMM-to-GPM constellation upgrade.
-- **👀 Multiple-Testing "Looks" Counter**: Tracks analytical exploratory queries and warns researchers when repeated testing elevates the risk of accidental false discoveries ($1 - (1 - 0.05)^m$).
-- **📊 Multi-Variable Cross-Check Lineup**: Compare multiple NASA planetary variables side-by-side to cross-validate physical consistency (e.g., rainfall decrease vs. soil moisture deficit vs. evapotranspiration).
-- **⏳ 304-Month Timeline Scrubber**: Animate monthly planetary anomalies from June 2000 through September 2025 with playback speed controls.
+- **Interactive 3D Globe & 2D Flat Map**: Smoothly morph between an orthographic 3D WebGL globe and an equirectangular flat map with MapLibre GL.
+- **Point & Custom Region Analysis**: Click any coordinate on Earth or draw a custom bounding polygon to compute instant aggregate trends and area-weighted statistics.
+- **Clear Statistical Verdicts**:
+  - **Significant Trend**: Strong multi-decadal signal verified after Hamed-Rao autocorrelation correction and False Discovery Rate (FDR) control.
+  - **Trending, Not Yet Significant**: A visible slope exists, but 25 years of data is not yet sufficient to mathematically rule out chance.
+  - **No Trend**: Historical fluctuations remain within expected natural variance.
+- **Detectability Clock**: Calculates the exact minimum years of continuous observation required before the regional trend becomes statistically detectable above background noise.
+- **2014 Satellite Sensor Shift Guard**: Flags potential sensor transition artifacts in precipitation data around the 2014 TRMM-to-GPM constellation upgrade.
+- **Multiple-Testing "Looks" Counter**: Tracks analytical exploratory queries and warns researchers when repeated testing elevates the risk of accidental false discoveries ($1 - (1 - 0.05)^m$).
+- **Multi-Variable Cross-Check Lineup**: Compare multiple NASA planetary variables side-by-side to cross-validate physical consistency (e.g., rainfall decrease vs. soil moisture deficit vs. evapotranspiration).
+- **304-Month Timeline Scrubber**: Animate monthly planetary anomalies from June 2000 through September 2025 with playback speed controls.
 
 ---
 
-## 🛰️ The 12 NASA Planetary Datasets
+## The 12 NASA Planetary Datasets
 
 Kendall harmonizes 12 planetary climate variables onto a unified 2.5° × 2.5° global grid (72 latitudes × 144 longitudes) over 304 contiguous months (June 2000 – September 2025):
 
@@ -90,7 +90,7 @@ Kendall harmonizes 12 planetary climate variables onto a unified 2.5° × 2.5° 
 
 ---
 
-## 🔬 Scientific Methodology: 3-Filter Verification
+## Scientific Methodology: 3-Filter Verification
 
 1. **Filter 1: Deseasonalization (Historical Same-Month Baseline)**  
    Each month's value is compared strictly against the 25-year historical average for that calendar month (e.g., July 2024 vs. all Julys from 2000 to 2025). This strips away regular annual cycles.
@@ -101,7 +101,7 @@ Kendall harmonizes 12 planetary climate variables onto a unified 2.5° × 2.5° 
 
 ---
 
-## 🛠️ Python Environment & Scientific Pipeline (Optional)
+## Python Environment & Scientific Pipeline (Optional)
 
 To run the scientific audit or reproduce the data processing pipeline, set up the **Conda** environment:
 
@@ -141,7 +141,7 @@ python src/export_web.py --var gpm_precip
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 The layout below mirrors the exact directory structure of the repository:
 
@@ -152,15 +152,6 @@ The layout below mirrors the exact directory structure of the repository:
 ├── Makefile                           # Command shortcuts (make serve, make audit-data)
 ├── README.md                          # Project documentation and setup guide
 ├── requirements.txt                   # Pipeline dependencies (xarray, netCDF4, pymannkendall)
-├── docs/
-│   └── submission/                    # NASA Space Apps Challenge submission kit
-│       ├── 01_project_name.txt        # Official project name ("Kendall")
-│       ├── 02_summary.txt             # Project summary (< 200 words)
-│       ├── 04_project_link.txt        # Live application URL
-│       ├── 05_project_details.md      # Detailed submission response & design rationale
-│       ├── 06_ai_use.txt              # Responsible AI usage disclosure
-│       ├── 07_nasa_data.txt           # NASA Earth Science missions cited
-│       └── 08_partner_and_other_data.txt # Partner & reference data citations
 ├── src/                               # Scientific data processing & audit pipeline
 │   ├── audit.py                       # 10-point completeness & integrity audit
 │   ├── auth.py                        # NASA Earthdata authentication handler
@@ -213,7 +204,7 @@ The layout below mirrors the exact directory structure of the repository:
 
 ---
 
-## 📜 License & Credits
+## License & Credits
 
 - **Application Code**: Open-source under the [Apache License 2.0](LICENSE).
 - **NASA Data Sources**: Publicly provided by NASA Earth Science Data Systems (GES DISC, GMAO, GPM Science Team, GLDAS Science Team).
