@@ -1,4 +1,4 @@
-"""Generic Earthdata Granule Downloader for Plot Twist.
+"""Generic Earthdata Granule Downloader for Kendall.
 
 Config-driven downloader supporting GPM, GLDAS, MERRA-2, and MODIS collections.
 Maintains atomic JSON manifests and skips already downloaded files.

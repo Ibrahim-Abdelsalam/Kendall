@@ -1,4 +1,4 @@
-"""Scientific Data Completeness & Integrity Audit for Kendall (Plot Twist).
+"""Scientific Data Completeness & Integrity Audit for Kendall.
 
 Performs comprehensive audits across Raw, Processed, Trend, and Web layers for every
 variable declared in variables.yaml.

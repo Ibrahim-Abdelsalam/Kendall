@@ -1,4 +1,4 @@
-"""Generic Trend Estimation Engine for Plot Twist.
+"""Generic Trend Estimation Engine for Kendall.
 
 Computes hardened statistical trends for any processed anomaly file:
   - Sen's slope (scaled to variable units per decade: per-month * 120)
@@ -269,7 +269,7 @@ def run_trend_for_variable(var_id: str) -> Path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generic trend estimator for Plot Twist.")
+    parser = argparse.ArgumentParser(description="Generic trend estimator for Kendall.")
     parser.add_argument("var_id", default="gpm_precip", nargs="?", help="Variable ID (default: gpm_precip)")
     args = parser.parse_args()
 

@@ -1,4 +1,4 @@
-"""Central configuration schema for all Earth-science variables in Plot Twist.
+"""Central configuration schema for all Earth-science variables in Kendall.
 
 Defines metadata, data source references, temporal windows, and regridding/aggregation
 functions for all project variables.

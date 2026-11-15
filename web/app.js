@@ -35,48 +35,6 @@
     { id: 'merra2_tqv', name: 'Column Water Vapor', agency: 'MERRA-2 M2TMNXSLV', unit: 'kg/m²/dec' },
   ];
 
-  const TOUR_CASES = [
-    {
-      caseNum: 'CASE 1 OF 4',
-      title: 'Amazon Basin: Genuine Drought or Sensor Break?',
-      lat: -3.75,
-      lon: -61.25,
-      varId: 'gpm_precip',
-      name: 'Amazon Basin, South America',
-      season: 'ALL',
-      body: 'A steep drying trend of −9.27 mm/month/decade dominates the Amazon. Yet the trend flips from positive (+5.38 mm) under TRMM to deeply negative (−23.29 mm) under GPM across the 2014 transition. Because neither sub-period is significant alone, this highlights the challenge of separating real physical droughts (2015/16, 2023/24) from sensor discontinuities.',
-    },
-    {
-      caseNum: 'CASE 2 OF 4',
-      title: 'Sahel Corridor: The Greening Recovery Debate',
-      lat: 13.75,
-      lon: 13.75,
-      varId: 'gpm_precip',
-      name: 'Sahel Corridor, North-Central Africa',
-      season: 'ALL',
-      body: 'Rainfall in the African Sahel shows a weakly positive trend (+0.26 mm/mo/decade in IMERG, +0.48 mm in GLDAS). While popular narratives hail a full "Sahel greening recovery," the autocorrelation-aware test shows p = 0.071 (not significant at α = 0.05). Trend over 2000–2025 remains modest.',
-    },
-    {
-      caseNum: 'CASE 3 OF 4',
-      title: 'Tibetan Plateau: Intense Alpine Thermal Amplification',
-      lat: 33.75,
-      lon: 81.25,
-      varId: 'gldas_temp',
-      name: 'Tibetan Plateau / Himalayas',
-      season: 'ALL',
-      body: 'The strongest Northern Hemisphere warming hotspot in the dataset occurs across the Tibetan Plateau (+2.75°C/decade). Autocorrelation-aware p-value is 3.45e-11 and FDR q is 2.48e-10. High-elevation amplification is verified with sustained, unmistakable warming.',
-    },
-    {
-      caseNum: 'CASE 4 OF 4',
-      title: 'Central Canada: Summer Wildfire Smoke Surge',
-      lat: 53.75,
-      lon: -106.25,
-      varId: 'merra2_aod',
-      name: 'Central Canada Boreal, North America',
-      season: 'JJA',
-      body: 'Across all months, Canadian boreal AOD shows a modest trend (+0.013/dec). But isolating June–July–August (summer wildfire season) reveals an intense +0.136/decade surge (10× steeper, p = 0.027), driven by historic boreal megafires in 2021, 2023 (peak AOD 0.50), and 2025. Seasonal slicing unmasks trends hidden by full-year averages.',
-    },
-  ];
 
   const CLIMATE_EVENTS = {
     20: '2002 El Niño Emergence',
@@ -91,7 +49,7 @@
   // Global State
   let savedProj = 'globe';
   try {
-    const sp = localStorage.getItem('kendall_projection') || localStorage.getItem('plottwist_projection');
+    const sp = localStorage.getItem('kendall_projection');
     if (sp === 'mercator' || sp === 'globe' || sp === 'flat') {
       savedProj = sp === 'flat' ? 'mercator' : sp;
     }
@@ -116,8 +74,6 @@
       timeseries: null,
       detectability: null,
     },
-    tourActive: false,
-    tourIndex: 0,
     isSpinningIntro: true,
     isFadingGrid: false,
     isMorphing: false,
@@ -1845,7 +1801,6 @@
   }
 
   function recordAnalysisChoice() {
-    if (state.isTourInitializing) return;
     state.analysisChoicesCount++;
     updateLooksUI();
 
@@ -2810,563 +2765,292 @@
     }
   }
 
-  // --- Guided Tour Engine (Narrated Audio, Dynamic Highlighting & Statistical Tour) ---
-  const CASE_TOUR_IDS = ['case_amazon', 'case_sahel', 'case_tibet', 'case_canada'];
-  const tourAudio = new Audio();
-  tourAudio.preload = 'auto';
 
-  function showTourWelcomeToast(msg = "Welcome to Kendall! Guided tour initiated.") {
-    const toast = document.getElementById('tour-welcome-toast');
-    const text = document.getElementById('tour-welcome-toast-text');
-    if (!toast || !text) return;
-    text.textContent = msg;
-    toast.classList.remove('hidden');
-    clearTimeout(toast._timer);
-    toast._timer = setTimeout(() => {
-      toast.classList.add('hidden');
-    }, 4000);
-  }
+  // --- Boot Sequence & Web Audio CRT Sound Engine ---
+  const bootEngine = {
+    audioCtx: null,
+    isActive: false,
+    isExiting: false,
+    timerIds: [],
 
-  function showTourCompleteModal() {
-    const modal = document.getElementById('modal-tour-complete');
-    if (modal) modal.classList.remove('hidden');
-  }
-
-  const tourEngine = {
-    toursData: null,
-    audioManifest: null,
-    activeTour: null,
-    activeTourId: null,
-    currentStepIndex: -1,
-    isPlaying: false,
-    isMuted: false,
-    playbackSpeed: 1.0,
-    captionsVisible: true,
-    isPausedForMapMove: false,
-    stepTimer: null,
-    currentHighlightTarget: null,
-    currentHighlightStyle: 'ring',
-
-    async loadData() {
-      if (!this.toursData) {
+    getAudioContext() {
+      if (!this.audioCtx) {
         try {
-          const res = await fetch('tour/tours.json');
-          this.toursData = await res.json();
-        } catch (e) {
-          console.warn('Failed to load tour/tours.json:', e);
-        }
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            this.audioCtx = new AudioContextClass();
+          }
+        } catch (e) {}
       }
-      if (!this.audioManifest) {
-        try {
-          const res = await fetch('tour/audio/manifest.json');
-          this.audioManifest = await res.json();
-        } catch (e) {
-          console.warn('Failed to load tour/audio/manifest.json:', e);
-        }
+      if (this.audioCtx && this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume().catch(() => {});
       }
+      return this.audioCtx;
     },
 
-    async startTour(tourId, startIdx = 0) {
-      await this.loadData();
-      if (!this.toursData || !this.toursData[tourId]) {
-        console.warn(`Tour '${tourId}' not found in tours.json.`);
-        return;
+    async resumeAudio() {
+      const ctx = this.getAudioContext();
+      if (ctx && ctx.state === 'suspended') {
+        try {
+          await ctx.resume();
+        } catch (e) {}
       }
+      return ctx;
+    },
 
-      state.isSpinningIntro = false;
-      const intro = document.getElementById('intro-overlay');
-      if (intro) {
-        intro.style.pointerEvents = 'none';
-        intro.classList.add('hidden');
+    // 1. Authentic CRT degauss thump & high-voltage flyback charging whine
+    playDegauss() {
+      const ctx = this.getAudioContext();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
       }
-
-      document.getElementById('modal-first-visit')?.classList.add('hidden');
       try {
-        localStorage.setItem('kendall_first_visit_tour_dismissed', 'true');
+        const now = ctx.currentTime;
+        
+        // Deep sub-bass degauss coil surge (85Hz down to 24Hz)
+        const oscLow = ctx.createOscillator();
+        const gainLow = ctx.createGain();
+        oscLow.type = 'sine';
+        oscLow.frequency.setValueAtTime(85, now);
+        oscLow.frequency.exponentialRampToValueAtTime(24, now + 0.45);
+        gainLow.gain.setValueAtTime(0.42, now);
+        gainLow.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+        oscLow.connect(gainLow);
+        gainLow.connect(ctx.destination);
+        oscLow.start(now);
+        oscLow.stop(now + 0.46);
+
+        // High-voltage flyback transformer charge whine (450Hz up to 9,500Hz)
+        const oscHigh = ctx.createOscillator();
+        const gainHigh = ctx.createGain();
+        oscHigh.type = 'triangle';
+        oscHigh.frequency.setValueAtTime(450, now);
+        oscHigh.frequency.exponentialRampToValueAtTime(9500, now + 0.55);
+        gainHigh.gain.setValueAtTime(0.001, now);
+        gainHigh.gain.linearRampToValueAtTime(0.24, now + 0.18);
+        gainHigh.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+        oscHigh.connect(gainHigh);
+        gainHigh.connect(ctx.destination);
+        oscHigh.start(now);
+        oscHigh.stop(now + 0.56);
       } catch (e) {}
-
-      this.activeTourId = tourId;
-      this.activeTour = this.toursData[tourId];
-      this.currentStepIndex = startIdx;
-      this.isPlaying = true;
-      this.isPausedForMapMove = false;
-
-      document.getElementById('tour-controller')?.classList.remove('hidden');
-      document.getElementById('tour-highlight-overlay')?.classList.remove('hidden');
-      document.getElementById('tour-resume-chip')?.classList.add('hidden');
-
-      this.renderDots();
-      showTourWelcomeToast("Welcome to Kendall! Guided tour initiated.");
-      await this.goToStep(startIdx);
     },
 
-    stopTour(completed = false) {
-      this.isPlaying = false;
-      this.activeTour = null;
-      this.activeTourId = null;
-      this.currentStepIndex = -1;
-      this.isPausedForMapMove = false;
-      this.currentHighlightTarget = null;
-
-      tourAudio.pause();
-      if (this.stepTimer) clearTimeout(this.stepTimer);
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-
-      document.getElementById('tour-controller')?.classList.add('hidden');
-      document.getElementById('tour-highlight-overlay')?.classList.add('hidden');
-      document.getElementById('tour-resume-chip')?.classList.add('hidden');
-      document.getElementById('tour-autoplay-prompt')?.classList.add('hidden');
-      document.getElementById('tour-welcome-toast')?.classList.add('hidden');
-      document.getElementById('tour-card')?.classList.add('hidden');
-      document.getElementById('btn-tour-ctrl-next')?.classList.remove('pulse-hint');
-      const actionsEl = document.getElementById('tour-step-actions');
-      if (actionsEl) {
-        actionsEl.innerHTML = '';
-        actionsEl.classList.add('hidden');
+    // 2. Analog Glitch & Static Burst
+    playGlitchBurst() {
+      const ctx = this.getAudioContext();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
       }
+      try {
+        const now = ctx.currentTime;
+        const dur = 0.16;
+        const bufferSize = Math.floor(ctx.sampleRate * dur);
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * (Math.random() > 0.4 ? 1 : 0.25);
+        }
 
-      if (completed) {
-        showTourCompleteModal();
-      }
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(2400, now);
+        filter.frequency.exponentialRampToValueAtTime(800, now + dur);
+        filter.Q.value = 3.5;
+
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.30, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+
+        noise.start(now);
+        noise.stop(now + dur);
+      } catch (e) {}
     },
 
-    renderDots() {
-      const container = document.getElementById('tour-ctrl-dots');
-      if (!container || !this.activeTour) return;
-      container.innerHTML = '';
-      const steps = this.activeTour.steps;
-      steps.forEach((s, idx) => {
-        const dot = document.createElement('span');
-        dot.className = 'tour-ctrl-dot' + (idx === this.currentStepIndex ? ' active' : '');
-        dot.title = `Step ${idx + 1}: ${s.title}`;
-        dot.addEventListener('click', () => {
-          this.goToStep(idx);
+    // 3. Monospace BIOS Terminal typing blip
+    playBlip(freq = 1400) {
+      const ctx = this.getAudioContext();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      try {
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(freq, now);
+        gain.gain.setValueAtTime(0.20, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.042);
+      } catch (e) {}
+    },
+
+    // 4. Futuristic sci-fi system unlock chime
+    playChime() {
+      const ctx = this.getAudioContext();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      try {
+        const now = ctx.currentTime;
+        const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6 chord
+        notes.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.035);
+          gain.gain.setValueAtTime(0.25 / (1 + idx * 0.35), now + idx * 0.035);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.75 + idx * 0.05);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + idx * 0.035);
+          osc.stop(now + 0.8 + idx * 0.05);
         });
-        container.appendChild(dot);
+      } catch (e) {}
+    },
+
+    start(force = false) {
+      const overlay = document.getElementById('boot-overlay');
+      if (!overlay) return;
+
+      this.clearTimers();
+      this.isExiting = false;
+
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      // Skip on automated initial load unless explicitly forced (e.g. key B or replayBoot)
+      if (!force && (window.navigator.webdriver || prefersReducedMotion || window.location.hash.startsWith('#demo-'))) {
+        this.finish(true);
+        return;
+      }
+
+      this.isActive = true;
+      this.getAudioContext();
+      overlay.classList.remove('hidden', 'fade-out', 'phase-beam-ignite', 'phase-beam-open', 'glitching', 'phase-glitch-out');
+      overlay.style.pointerEvents = 'auto';
+
+      // Force browser reflow to reliably restart animations
+      void overlay.offsetWidth;
+
+      // Reset lines and terminal actions
+      for (let i = 1; i <= 5; i++) {
+        document.getElementById(`boot-line-${i}`)?.classList.remove('visible');
+      }
+      document.getElementById('boot-terminal-actions')?.classList.remove('visible');
+
+      // Phase 1: High-voltage flyback charge & CRT beam ignition
+      this.playDegauss();
+      this.timerIds.push(setTimeout(() => {
+        if (!this.isActive || this.isExiting) return;
+        overlay.classList.add('phase-beam-ignite');
+      }, 80));
+
+      // Phase 2: Dwell on glowing beam for 700ms so user actually sees and enjoys the CRT electron beam,
+      // then expand vertically into full monitor screen!
+      this.timerIds.push(setTimeout(() => {
+        if (!this.isActive || this.isExiting) return;
+        this.playGlitchBurst();
+        overlay.classList.add('glitching');
+        overlay.classList.add('phase-beam-open');
+      }, 750));
+
+      this.timerIds.push(setTimeout(() => {
+        if (!this.isActive || this.isExiting) return;
+        overlay.classList.remove('glitching');
+      }, 1250));
+
+      // Phase 3: Telemetry lines typing sequentially with clear, deliberate pacing
+      const lines = [
+        { id: 'boot-line-1', delay: 1400, freq: 1100 },
+        { id: 'boot-line-2', delay: 1850, freq: 1350 },
+        { id: 'boot-line-3', delay: 2300, freq: 1600 },
+        { id: 'boot-line-4', delay: 2750, freq: 1850 },
+        { id: 'boot-line-5', delay: 3200, freq: 2200 },
+      ];
+
+      lines.forEach((l) => {
+        this.timerIds.push(setTimeout(() => {
+          if (!this.isActive || this.isExiting) return;
+          const el = document.getElementById(l.id);
+          if (el) el.classList.add('visible');
+          this.playBlip(l.freq);
+        }, l.delay));
       });
+
+      // Phase 4: Ready status, unlock chime & reveal action button
+      this.timerIds.push(setTimeout(() => {
+        if (!this.isActive || this.isExiting) return;
+        this.playChime();
+        const actions = document.getElementById('boot-terminal-actions');
+        if (actions) actions.classList.add('visible');
+      }, 3450));
+
+      // Terminal stays on screen and waits for user interaction [Space, Enter, Esc, or Enter Button]
     },
 
-    async goToStep(idx) {
-      if (!this.activeTour) return;
-      const steps = this.activeTour.steps;
-      if (idx < 0 || idx >= steps.length) {
-        this.stopTour();
+    async exitWithGlitch(source = 'action') {
+      if (this.isExiting) return;
+      this.isExiting = true;
+      this.clearTimers();
+
+      const overlay = document.getElementById('boot-overlay');
+      if (!overlay) {
+        this.finish(true);
         return;
       }
 
-      resetAnalysisCounter();
-      this.currentStepIndex = idx;
-      const step = steps[idx];
+      await this.resumeAudio();
+      this.playGlitchBurst();
+      this.playChime();
 
-      if (this.stepTimer) clearTimeout(this.stepTimer);
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      // Trigger chromatic aberration CRT glitch collapse
+      overlay.classList.add('phase-glitch-out');
 
-      const badgeEl = document.getElementById('tour-ctrl-badge');
-      const titleEl = document.getElementById('tour-ctrl-title');
-      const captionEl = document.getElementById('tour-captions-text');
-      const noteEl = document.getElementById('tour-captions-note');
-
-      if (badgeEl) badgeEl.textContent = `STEP ${idx + 1} OF ${steps.length}`;
-      if (titleEl) titleEl.textContent = step.title;
-      if (captionEl) captionEl.textContent = step.text;
-      if (noteEl) noteEl.classList.add('hidden');
-
-      const actionsEl = document.getElementById('tour-step-actions');
-      const nextBtn = document.getElementById('btn-tour-ctrl-next');
-      const isManualStep = step.autoAdvance === false || step.id === 'site_01_welcome' || (this.activeTourId === 'site_tour' && idx === 0);
-
-      if (actionsEl) {
-        if (isManualStep) {
-          actionsEl.innerHTML = `
-            <button class="tour-proceed-btn" id="btn-tour-step-proceed" title="Click to begin exploring parameters">
-              <span>Next: Explore Parameters</span>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
-          `;
-          actionsEl.classList.remove('hidden');
-          const proceedBtn = document.getElementById('btn-tour-step-proceed');
-          if (proceedBtn) {
-            proceedBtn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              tourEngine.advanceStep(1);
-            });
-          }
-          if (nextBtn) nextBtn.classList.add('pulse-hint');
-        } else {
-          actionsEl.innerHTML = '';
-          actionsEl.classList.add('hidden');
-          if (nextBtn) nextBtn.classList.remove('pulse-hint');
-        }
-      }
-
-      const dots = document.querySelectorAll('.tour-ctrl-dot');
-      dots.forEach((d, i) => d.classList.toggle('active', i === idx));
-
-      this.updatePlayPauseIcon(true);
-
-      // Perform actions
-      const act = step.action || {};
-      if (act.setProjection && act.setProjection !== state.projection) {
-        setProjection(act.setProjection);
-      }
-      if (act.setMode && act.setMode !== state.selectionMode) {
-        setSelectionMode(act.setMode);
-      }
-      if (act.setSeason) {
-        handleSeasonPreset(act.setSeason);
-      }
-      if (act.setPeriod) {
-        setPeriodRange(act.setPeriod[0], act.setPeriod[1]);
-      }
-      if (act.setVar && act.setVar !== state.currentVarId) {
-        await switchVariable(act.setVar);
-      }
-
-      if (act.flyTo && state.map) {
-        state.isTourFlying = true;
-        const snap = snapCoordsToGrid(act.flyTo.lat, act.flyTo.lon);
-        state.cellIndex = snap;
-        state.currentPin = { lat: snap.snappedLat, lon: snap.snappedLon };
-        dropPinMarker(snap.snappedLat, snap.snappedLon);
-        updateInspector(snap.latIdx, snap.lonIdx);
-
-        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        state.map.flyTo({
-          center: [act.flyTo.lon, act.flyTo.lat],
-          zoom: act.flyTo.zoom || 3.5,
-          pitch: act.flyTo.pitch || 0,
-          duration: prefersReducedMotion ? 0 : 1800,
-          essential: true,
-        });
-
-        setTimeout(() => {
-          state.isTourFlying = false;
-          tourEngine.updateHighlight();
-        }, prefersReducedMotion ? 50 : 1900);
-      }
-
-      if (typeof step.target === 'string') {
-        const targetEl = document.querySelector(step.target);
-        if (targetEl) {
-          const scrollParent = targetEl.closest('.panel-right, .panel-left');
-          if (scrollParent) {
-            targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }
-        }
-      }
-
-      this.currentHighlightTarget = step.target;
-      this.currentHighlightStyle = step.highlightStyle || 'ring';
-      this.updateHighlight();
-
-      this.playAudio(step);
-      resetAnalysisCounter();
+      this.timerIds.push(setTimeout(() => {
+        this.finish(true);
+      }, 420));
     },
 
-    updateHighlight() {
-      if (!this.activeTour || !this.currentHighlightTarget) {
-        const overlay = document.getElementById('tour-highlight-overlay');
-        if (overlay) overlay.classList.add('hidden');
+    clearTimers() {
+      this.timerIds.forEach((t) => clearTimeout(t));
+      this.timerIds = [];
+    },
+
+    finish(immediate = false) {
+      this.clearTimers();
+      this.isActive = false;
+      this.isExiting = false;
+      const overlay = document.getElementById('boot-overlay');
+      if (!overlay) return;
+
+      if (immediate) {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('phase-beam-ignite', 'phase-beam-open', 'glitching', 'phase-glitch-out', 'fade-out');
+        overlay.style.pointerEvents = 'none';
         return;
       }
 
-      const overlay = document.getElementById('tour-highlight-overlay');
-      const cutoutRect = document.getElementById('tour-cutout-rect');
-      const cutoutCircle = document.getElementById('tour-cutout-circle');
-      const ring = document.getElementById('tour-target-ring');
-      const arrow = document.getElementById('tour-target-arrow');
-      const controller = document.getElementById('tour-controller');
-
-      if (!overlay || !cutoutRect || !cutoutCircle || !ring) return;
-
-      overlay.classList.remove('hidden');
-
-      let x = 0, y = 0, w = 0, h = 0, isCircle = false, radius = 0;
-
-      if (typeof this.currentHighlightTarget === 'object' && this.currentHighlightTarget.type === 'map_coord') {
-        if (state.map) {
-          const pt = state.map.project([this.currentHighlightTarget.lng, this.currentHighlightTarget.lat]);
-          x = pt.x;
-          y = pt.y;
-          radius = 42;
-          isCircle = true;
-        }
-      } else if (typeof this.currentHighlightTarget === 'string') {
-        const el = document.querySelector(this.currentHighlightTarget);
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          const pad = 6;
-          x = rect.left - pad;
-          y = rect.top - pad;
-          w = rect.width + pad * 2;
-          h = rect.height + pad * 2;
-          isCircle = false;
-        } else {
-          x = window.innerWidth / 2;
-          y = window.innerHeight / 2;
-          radius = 120;
-          isCircle = true;
-        }
-      }
-
-      if (isCircle) {
-        cutoutRect.setAttribute('width', '0');
-        cutoutRect.setAttribute('height', '0');
-        cutoutCircle.setAttribute('cx', String(x));
-        cutoutCircle.setAttribute('cy', String(y));
-        cutoutCircle.setAttribute('r', String(radius));
-
-        ring.classList.remove('hidden');
-        ring.style.left = `${x - radius}px`;
-        ring.style.top = `${y - radius}px`;
-        ring.style.width = `${radius * 2}px`;
-        ring.style.height = `${radius * 2}px`;
-        ring.style.borderRadius = '50%';
-      } else {
-        cutoutCircle.setAttribute('r', '0');
-        cutoutRect.setAttribute('x', String(x));
-        cutoutRect.setAttribute('y', String(y));
-        cutoutRect.setAttribute('width', String(w));
-        cutoutRect.setAttribute('height', String(h));
-        cutoutRect.setAttribute('rx', '6');
-
-        ring.classList.remove('hidden');
-        ring.style.left = `${x}px`;
-        ring.style.top = `${y}px`;
-        ring.style.width = `${w}px`;
-        ring.style.height = `${h}px`;
-        ring.style.borderRadius = '6px';
-      }
-
-      const targetMidX = isCircle ? x : x + w / 2;
-      const targetTop = isCircle ? y - radius : y;
-      const targetBottom = isCircle ? y + radius : y + h;
-
-      if (this.currentHighlightStyle === 'arrow' && arrow) {
-        arrow.classList.remove('hidden');
-        if (targetTop >= 45) {
-          arrow.style.left = `${Math.max(10, Math.min(window.innerWidth - 42, targetMidX - 16))}px`;
-          arrow.style.top = `${targetTop - 36}px`;
-          arrow.style.setProperty('--arrow-rot', '0deg');
-        } else {
-          arrow.style.left = `${Math.max(10, Math.min(window.innerWidth - 42, targetMidX - 16))}px`;
-          arrow.style.top = `${targetBottom + 8}px`;
-          arrow.style.setProperty('--arrow-rot', '180deg');
-        }
-      } else if (arrow) {
-        arrow.classList.add('hidden');
-      }
-
-      // Mobile controller positioning: never cover target!
-      if (window.innerWidth <= 820 && controller) {
-        const targetMidY = isCircle ? y : y + h / 2;
-        if (targetMidY > window.innerHeight * 0.45) {
-          controller.classList.add('top-docked');
-        } else {
-          controller.classList.remove('top-docked');
-        }
-      }
-    },
-
-    playAudio(step) {
-      if (!this.isPlaying) return;
-
-      const manifestItem = this.audioManifest ? this.audioManifest[step.id] : null;
-      const durSec = manifestItem ? manifestItem.duration : (step.durationFallbackMs / 1000.0);
-      const durationMs = durSec * 1000;
-
-      const isAutoAdvance = step.autoAdvance !== false && step.id !== 'site_01_welcome' && !(this.activeTourId === 'site_tour' && this.currentStepIndex === 0);
-
-      tourAudio.pause();
-      tourAudio.src = `tour/${step.audio}`;
-      tourAudio.playbackRate = this.playbackSpeed;
-      tourAudio.muted = this.isMuted;
-
-      let hasEnded = false;
-
-      tourAudio.onended = () => {
-        hasEnded = true;
-        if (isAutoAdvance && this.isPlaying) {
-          this.stepTimer = setTimeout(() => {
-            this.advanceStep(1);
-          }, 400);
-        } else {
-          this.isPlaying = false;
-          this.updatePlayPauseIcon(false);
-        }
-      };
-
-      tourAudio.onerror = () => {
-        console.warn(`Tour audio '${step.audio}' failed to load; trying speech synthesis fallback.`);
-        if ('speechSynthesis' in window) {
-          const noteEl = document.getElementById('tour-captions-note');
-          if (noteEl) {
-            noteEl.textContent = '[Browser voice fallback]';
-            noteEl.classList.remove('hidden');
-          }
-          window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(step.text);
-          utterance.rate = this.playbackSpeed;
-          utterance.onend = () => {
-            if (isAutoAdvance && this.isPlaying) {
-              this.advanceStep(1);
-            } else {
-              this.isPlaying = false;
-              this.updatePlayPauseIcon(false);
-            }
-          };
-          utterance.onerror = () => {
-            if (isAutoAdvance && this.isPlaying) {
-              this.advanceStep(1);
-            } else {
-              this.isPlaying = false;
-              this.updatePlayPauseIcon(false);
-            }
-          };
-          window.speechSynthesis.speak(utterance);
-        } else {
-          if (isAutoAdvance) {
-            this.stepTimer = setTimeout(() => {
-              if (this.isPlaying) this.advanceStep(1);
-            }, durationMs / this.playbackSpeed);
-          } else {
-            this.isPlaying = false;
-            this.updatePlayPauseIcon(false);
-          }
-        }
-      };
-
-      const playPromise = tourAudio.play();
-      if (playPromise !== undefined) {
-        playPromise.then(() => {
-          document.getElementById('tour-autoplay-prompt')?.classList.add('hidden');
-        }).catch((err) => {
-          console.warn('Autoplay prevented tour audio:', err);
-          document.getElementById('tour-autoplay-prompt')?.classList.remove('hidden');
-          if (isAutoAdvance) {
-            this.stepTimer = setTimeout(() => {
-              if (this.isPlaying && !hasEnded) {
-                this.advanceStep(1);
-              }
-            }, durationMs / this.playbackSpeed);
-          }
-        });
-      }
-    },
-
-    advanceStep(delta) {
-      if (!this.activeTour) return;
-      const nextIdx = this.currentStepIndex + delta;
-      if (nextIdx >= this.activeTour.steps.length) {
-        this.stopTour(true);
-      } else if (nextIdx < 0) {
-        this.goToStep(0);
-      } else {
-        this.goToStep(nextIdx);
-      }
-    },
-
-    togglePlayPause() {
-      if (!this.activeTour) return;
-      if (this.isPlaying) {
-        this.isPlaying = false;
-        tourAudio.pause();
-        if (this.stepTimer) clearTimeout(this.stepTimer);
-        if ('speechSynthesis' in window) window.speechSynthesis.pause();
-        this.updatePlayPauseIcon(false);
-      } else {
-        this.isPlaying = true;
-        this.isPausedForMapMove = false;
-        document.getElementById('tour-resume-chip')?.classList.add('hidden');
-        this.updatePlayPauseIcon(true);
-        if (tourAudio.paused && tourAudio.currentTime < tourAudio.duration) {
-          tourAudio.play().catch(() => {});
-        } else {
-          const step = this.activeTour.steps[this.currentStepIndex];
-          this.playAudio(step);
-        }
-      }
-    },
-
-    updatePlayPauseIcon(playing) {
-      const iconPlay = document.querySelector('#btn-tour-ctrl-play-pause .icon-play');
-      const iconPause = document.querySelector('#btn-tour-ctrl-play-pause .icon-pause');
-      if (iconPlay && iconPause) {
-        if (playing) {
-          iconPlay.classList.add('hidden');
-          iconPause.classList.remove('hidden');
-        } else {
-          iconPlay.classList.remove('hidden');
-          iconPause.classList.add('hidden');
-        }
-      }
-    },
-
-    pauseForManualInteraction() {
-      if (!this.activeTour || !this.isPlaying) return;
-      this.isPlaying = false;
-      this.isPausedForMapMove = true;
-      tourAudio.pause();
-      if (this.stepTimer) clearTimeout(this.stepTimer);
-      if ('speechSynthesis' in window) window.speechSynthesis.pause();
-      this.updatePlayPauseIcon(false);
-
-      const resumeChip = document.getElementById('tour-resume-chip');
-      if (resumeChip) resumeChip.classList.remove('hidden');
-    },
-
-    resumeFromManualInteraction() {
-      const resumeChip = document.getElementById('tour-resume-chip');
-      if (resumeChip) resumeChip.classList.add('hidden');
-      this.isPausedForMapMove = false;
-      this.togglePlayPause();
-    },
-
-    setSpeed(speed) {
-      this.playbackSpeed = speed;
-      tourAudio.playbackRate = speed;
-      const btn = document.getElementById('btn-tour-speed');
-      if (btn) btn.textContent = `${speed}×`;
-      const opts = document.querySelectorAll('.tour-speed-dropdown .speed-opt');
-      opts.forEach((o) => o.classList.toggle('active', parseFloat(o.dataset.speed) === speed));
-      document.getElementById('tour-speed-dropdown')?.classList.add('hidden');
-    },
-
-    toggleMute() {
-      this.isMuted = !this.isMuted;
-      tourAudio.muted = this.isMuted;
-      const unmutedIcon = document.querySelector('#btn-tour-ctrl-mute .icon-unmuted');
-      const mutedIcon = document.querySelector('#btn-tour-ctrl-mute .icon-muted');
-      if (unmutedIcon && mutedIcon) {
-        unmutedIcon.classList.toggle('hidden', this.isMuted);
-        mutedIcon.classList.toggle('hidden', !this.isMuted);
-      }
-    },
-
-    toggleCaptions() {
-      this.captionsVisible = !this.captionsVisible;
-      const captionsBox = document.getElementById('tour-captions-box');
-      const btnCaptions = document.getElementById('btn-tour-ctrl-captions');
-      if (captionsBox) captionsBox.classList.toggle('hidden', !this.captionsVisible);
-      if (btnCaptions) btnCaptions.classList.toggle('active', this.captionsVisible);
-    },
+      overlay.classList.add('fade-out');
+      setTimeout(() => {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('phase-beam-ignite', 'phase-beam-open', 'glitching', 'phase-glitch-out', 'fade-out');
+        overlay.style.pointerEvents = 'none';
+      }, 400);
+    }
   };
-
-  async function launchTourStep(idx) {
-    const tourId = CASE_TOUR_IDS[idx] || 'case_amazon';
-    const step = TOUR_CASES[idx];
-    const stepPill = document.getElementById('tour-step-pill');
-    const titleEl = document.getElementById('tour-title');
-    const bodyEl = document.getElementById('tour-body');
-    const dots = document.querySelectorAll('.tour-dot');
-
-    if (stepPill && step) stepPill.textContent = step.caseNum;
-    if (titleEl && step) titleEl.textContent = step.title;
-    if (bodyEl && step) bodyEl.textContent = step.body;
-    dots.forEach((d, i) => d.classList.toggle('active', i === idx));
-
-    await tourEngine.startTour(tourId);
-  }
 
   // --- Manual Bounding Box, Period Range & Seasonal Filters ---
   function applyManualBbox() {
@@ -3586,171 +3270,55 @@
 
   // --- Setup Event Listeners ---
   function setupListeners() {
+    // Global User Interaction Audio Activator (unblocks Web Audio across origin)
+    const unlockAllAudio = () => {
+      bootEngine.resumeAudio();
+    };
+    ['pointerdown', 'keydown', 'touchstart', 'mousedown'].forEach((evt) => {
+      window.addEventListener(evt, unlockAllAudio, { passive: true });
+    });
+
+    // Boot sequence overlay handlers
+    const bootOverlay = document.getElementById('boot-overlay');
+    if (bootOverlay) {
+      bootOverlay.addEventListener('click', () => {
+        // Only allow clicking background backdrop to dismiss if boot has finished typing
+        const actions = document.getElementById('boot-terminal-actions');
+        const isDone = actions && actions.classList.contains('visible');
+        if (isDone && bootEngine.isActive && !bootEngine.isExiting) {
+          bootEngine.exitWithGlitch('backdrop_click');
+        }
+      });
+    }
+    const btnBootEnter = document.getElementById('btn-boot-enter');
+    if (btnBootEnter) {
+      btnBootEnter.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (bootEngine.isActive && !bootEngine.isExiting) {
+          bootEngine.exitWithGlitch('btn_enter_click');
+        }
+      });
+    }
+    const btnBootSkip = document.getElementById('btn-boot-skip');
+    if (btnBootSkip) {
+      btnBootSkip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (bootEngine.isActive && !bootEngine.isExiting) {
+          bootEngine.exitWithGlitch('btn_skip_click');
+        }
+      });
+    }
+
     const btnStart = document.getElementById('btn-intro-start');
     if (btnStart) {
       btnStart.addEventListener('click', () => {
+        bootEngine.finish(true);
         state.isSpinningIntro = false;
         const intro = document.getElementById('intro-overlay');
         if (intro) {
           intro.style.pointerEvents = 'none';
           intro.classList.add('hidden');
         }
-        let firstVisitDismissed = false;
-        try {
-          firstVisitDismissed = localStorage.getItem('kendall_first_visit_tour_dismissed') === 'true';
-        } catch (e) {}
-        if (!firstVisitDismissed) {
-          document.getElementById('modal-first-visit')?.classList.remove('hidden');
-        }
-      });
-    }
-
-    // Guide Me Header Button
-    const btnGuideMe = document.getElementById('btn-guide-me');
-    if (btnGuideMe) {
-      btnGuideMe.addEventListener('click', () => {
-        tourEngine.startTour('site_tour');
-      });
-    }
-
-    const btnIntroTour = document.getElementById('btn-intro-tour');
-    if (btnIntroTour) {
-      btnIntroTour.addEventListener('click', () => {
-        state.isSpinningIntro = false;
-        const intro = document.getElementById('intro-overlay');
-        if (intro) {
-          intro.style.pointerEvents = 'none';
-          intro.classList.add('hidden');
-        }
-        tourEngine.startTour('site_tour');
-      });
-    }
-
-    // First-Visit Modal Actions
-    const btnFirstVisitTour = document.getElementById('btn-first-visit-tour');
-    const btnFirstVisitDismiss = document.getElementById('btn-first-visit-dismiss');
-    if (btnFirstVisitTour) {
-      btnFirstVisitTour.addEventListener('click', () => {
-        document.getElementById('modal-first-visit')?.classList.add('hidden');
-        try {
-          localStorage.setItem('kendall_first_visit_tour_dismissed', 'true');
-        } catch (e) {}
-        tourEngine.startTour('site_tour');
-      });
-    }
-    if (btnFirstVisitDismiss) {
-      btnFirstVisitDismiss.addEventListener('click', () => {
-        document.getElementById('modal-first-visit')?.classList.add('hidden');
-        try {
-          localStorage.setItem('kendall_first_visit_tour_dismissed', 'true');
-        } catch (e) {}
-      });
-    }
-
-    // Floating Tour Controller Buttons
-    const btnTourPlayPause = document.getElementById('btn-tour-ctrl-play-pause');
-    const btnTourCtrlNext = document.getElementById('btn-tour-ctrl-next');
-    const btnTourCtrlPrev = document.getElementById('btn-tour-ctrl-prev');
-    const btnTourCtrlClose = document.getElementById('btn-tour-ctrl-close');
-    const btnTourCtrlSkip = document.getElementById('btn-tour-ctrl-skip');
-    const btnTourCtrlMute = document.getElementById('btn-tour-ctrl-mute');
-    const btnTourCtrlCaptions = document.getElementById('btn-tour-ctrl-captions');
-    const btnTourSpeed = document.getElementById('btn-tour-speed');
-    const speedOpts = document.querySelectorAll('.tour-speed-dropdown .speed-opt');
-    const btnResumeTour = document.getElementById('btn-resume-tour');
-    const btnEnableSound = document.getElementById('btn-tour-enable-sound');
-
-    if (btnTourPlayPause) btnTourPlayPause.addEventListener('click', () => tourEngine.togglePlayPause());
-    if (btnTourCtrlNext) btnTourCtrlNext.addEventListener('click', () => tourEngine.advanceStep(1));
-    if (btnTourCtrlPrev) btnTourCtrlPrev.addEventListener('click', () => tourEngine.advanceStep(-1));
-    if (btnTourCtrlClose) btnTourCtrlClose.addEventListener('click', () => tourEngine.stopTour());
-    if (btnTourCtrlSkip) btnTourCtrlSkip.addEventListener('click', () => tourEngine.stopTour());
-    if (btnTourCtrlMute) btnTourCtrlMute.addEventListener('click', () => tourEngine.toggleMute());
-    if (btnTourCtrlCaptions) btnTourCtrlCaptions.addEventListener('click', () => tourEngine.toggleCaptions());
-    if (btnResumeTour) btnResumeTour.addEventListener('click', () => tourEngine.resumeFromManualInteraction());
-    document.getElementById('btn-tour-complete-close')?.addEventListener('click', () => {
-      document.getElementById('modal-tour-complete')?.classList.add('hidden');
-    });
-    if (btnEnableSound) {
-      btnEnableSound.addEventListener('click', () => {
-        document.getElementById('tour-autoplay-prompt')?.classList.add('hidden');
-        tourAudio.play().catch(() => {});
-      });
-    }
-
-    if (btnTourSpeed) {
-      btnTourSpeed.addEventListener('click', (e) => {
-        e.stopPropagation();
-        document.getElementById('tour-speed-dropdown')?.classList.toggle('hidden');
-      });
-    }
-    speedOpts.forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const spd = parseFloat(btn.dataset.speed || '1.0');
-        tourEngine.setSpeed(spd);
-      });
-    });
-    document.addEventListener('click', () => {
-      document.getElementById('tour-speed-dropdown')?.classList.add('hidden');
-    });
-
-    // Map listeners for tour highlighting tracking and manual drag detection
-    if (state.map) {
-      state.map.on('move', () => {
-        tourEngine.updateHighlight();
-      });
-      state.map.on('render', () => {
-        if (tourEngine.activeTour) tourEngine.updateHighlight();
-      });
-      state.map.on('dragstart', () => {
-        if (tourEngine.activeTour && tourEngine.isPlaying && !state.isTourFlying) {
-          tourEngine.pauseForManualInteraction();
-        }
-      });
-      state.map.on('rotatestart', () => {
-        if (tourEngine.activeTour && tourEngine.isPlaying && !state.isTourFlying) {
-          tourEngine.pauseForManualInteraction();
-        }
-      });
-      state.map.on('pitchstart', () => {
-        if (tourEngine.activeTour && tourEngine.isPlaying && !state.isTourFlying) {
-          tourEngine.pauseForManualInteraction();
-        }
-      });
-    }
-
-    window.addEventListener('resize', () => {
-      if (tourEngine.activeTour) tourEngine.updateHighlight();
-    });
-    window.addEventListener('scroll', () => {
-      if (tourEngine.activeTour) tourEngine.updateHighlight();
-    }, true);
-
-    const btnTour = document.getElementById('btn-start-tour');
-    if (btnTour) {
-      btnTour.addEventListener('click', () => launchTourStep(0));
-    }
-
-    const btnTourNext = document.getElementById('btn-tour-next');
-    const btnTourPrev = document.getElementById('btn-tour-prev');
-    const btnTourClose = document.getElementById('btn-close-tour');
-
-    if (btnTourNext) {
-      btnTourNext.addEventListener('click', () => {
-        const nextIdx = (state.tourIndex + 1) % TOUR_CASES.length;
-        launchTourStep(nextIdx);
-      });
-    }
-    if (btnTourPrev) {
-      btnTourPrev.addEventListener('click', () => {
-        const prevIdx = (state.tourIndex - 1 + TOUR_CASES.length) % TOUR_CASES.length;
-        launchTourStep(prevIdx);
-      });
-    }
-    if (btnTourClose) {
-      btnTourClose.addEventListener('click', () => {
-        document.getElementById('tour-card').classList.add('hidden');
       });
     }
 
@@ -4024,10 +3592,12 @@
         e.stopPropagation();
         presetsMenu.classList.toggle('hidden');
       });
-      window.addEventListener('click', () => presetsMenu.classList.add('hidden'));
+      window.addEventListener('click', () => {
+        presetsMenu.classList.add('hidden');
+      });
     }
 
-    document.querySelectorAll('.preset-item').forEach((btn) => {
+    document.querySelectorAll('#presets-menu .preset-item').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (presetsMenu) presetsMenu.classList.add('hidden');
         applyPreset(btn.dataset.preset);
@@ -4301,24 +3871,25 @@
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT') return;
 
-      if (tourEngine.activeTour) {
-        if (e.code === 'Space') {
+      if (bootEngine.isActive) {
+        if (e.code === 'Space' || e.code === 'Enter' || e.key === 'Escape') {
           e.preventDefault();
-          tourEngine.togglePlayPause();
-          return;
-        } else if (e.code === 'ArrowRight') {
-          e.preventDefault();
-          tourEngine.advanceStep(1);
-          return;
-        } else if (e.code === 'ArrowLeft') {
-          e.preventDefault();
-          tourEngine.advanceStep(-1);
-          return;
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          tourEngine.stopTour();
+          bootEngine.exitWithGlitch('keydown_' + e.code);
           return;
         }
+      }
+
+      const introEl = document.getElementById('intro-overlay');
+      const isIntroVisible = introEl && !introEl.classList.contains('hidden');
+      if (isIntroVisible) {
+        if (e.code === 'Enter') {
+          e.preventDefault();
+          document.getElementById('btn-intro-start')?.click();
+        } else if (e.code === 'KeyB' || e.key.toLowerCase() === 'b') {
+          e.preventDefault();
+          bootEngine.start(true);
+        }
+        return;
       }
 
       if (e.code === 'Space') {
@@ -4334,16 +3905,6 @@
         const curIdx = VARIABLES_LIST.findIndex((v) => v.id === state.currentVarId);
         const prevId = VARIABLES_LIST[(curIdx - 1 + VARIABLES_LIST.length) % VARIABLES_LIST.length].id;
         switchVariable(prevId);
-      } else if (e.key === '1') {
-        launchTourStep(0);
-      } else if (e.key === '2') {
-        launchTourStep(1);
-      } else if (e.key === '3') {
-        launchTourStep(2);
-      } else if (e.key === '4') {
-        launchTourStep(3);
-      } else if (e.key.toLowerCase() === 't') {
-        tourEngine.startTour('site_tour');
       } else if (e.key.toLowerCase() === 'd') {
         toggleDrawRegion();
       } else if (e.key.toLowerCase() === 'r') {
@@ -4365,15 +3926,13 @@
         setProjection(nextProj);
       } else if (e.key.toLowerCase() === 'p') {
         toggleTilt();
+      } else if (e.key.toLowerCase() === 'b') {
+        bootEngine.start(true);
       } else if (e.key === 'Escape') {
-        if (tourEngine.activeTour) tourEngine.stopTour();
         if (state.isDrawingRegion) toggleDrawRegion(false);
         setPopoverExpanded(false);
         hideMilestoneToast();
         document.getElementById('modal-shortcuts')?.classList.add('hidden');
-        document.getElementById('modal-first-visit')?.classList.add('hidden');
-        document.getElementById('modal-tour-complete')?.classList.add('hidden');
-        document.getElementById('tour-card')?.classList.add('hidden');
         document.getElementById('presets-menu')?.classList.add('hidden');
       } else if (e.key === '?') {
         document.getElementById('modal-shortcuts')?.classList.remove('hidden');
@@ -4383,18 +3942,13 @@
 
   // --- Main Application Lifecycle Entry ---
   async function init() {
+    setupListeners();
     renderVariablePicker();
+    bootEngine.start();
     initCharts();
 
     await initMap();
-    setupListeners();
     updateLooksUI();
-
-    // Check first-visit offer
-    let firstVisitDismissed = false;
-    try {
-      firstVisitDismissed = localStorage.getItem('kendall_first_visit_tour_dismissed') === 'true';
-    } catch (e) {}
 
     // Initialize projection UI state
     setProjection(state.projection, false);
@@ -4402,43 +3956,23 @@
     const hash = window.location.hash;
     const hasAppliedCustomHash = parseAndApplyHash(hash);
 
-    if (hash === '#demo-sahel') {
-      state.isSpinningIntro = false;
-      document.getElementById('intro-overlay')?.classList.add('hidden');
-      await launchTourStep(1);
-    } else if (hash === '#demo-tibet') {
-      state.isSpinningIntro = false;
-      document.getElementById('intro-overlay')?.classList.add('hidden');
-      await launchTourStep(2);
-    } else if (hash === '#demo-amazon') {
-      state.isSpinningIntro = false;
-      document.getElementById('intro-overlay')?.classList.add('hidden');
-      await launchTourStep(0);
-    } else if (hash === '#demo-canada') {
-      state.isSpinningIntro = false;
-      document.getElementById('intro-overlay')?.classList.add('hidden');
-      await launchTourStep(3);
-    } else {
-      await loadVariable(state.currentVarId);
-      const varData = state.cache[state.currentVarId];
-      updateGridLayer(varData);
+    await loadVariable(state.currentVarId);
+    const varData = state.cache[state.currentVarId];
+    updateGridLayer(varData);
 
-      if (hasAppliedCustomHash) {
-        state.isSpinningIntro = false;
-        document.getElementById('intro-overlay')?.classList.add('hidden');
-        setSelectionMode(state.selectionMode);
-        setPeriodRange(state.startYear, state.endYear);
-        handleSeasonPreset(state.seasonFilter);
-        if (state.selectionMode === 'point') {
-          dropPinMarker(state.currentPin.lat, state.currentPin.lon);
-        } else {
-          updateRegionGeoJson();
-        }
-        updateInspector();
-      } else {
+    if (hasAppliedCustomHash) {
+      setSelectionMode(state.selectionMode);
+      setPeriodRange(state.startYear, state.endYear);
+      handleSeasonPreset(state.seasonFilter);
+      if (state.selectionMode === 'point') {
         dropPinMarker(state.currentPin.lat, state.currentPin.lon);
-        updateInspector(state.cellIndex.latIdx, state.cellIndex.lonIdx);
+      } else {
+        updateRegionGeoJson();
       }
+      updateInspector();
+    } else {
+      dropPinMarker(state.currentPin.lat, state.currentPin.lon);
+      updateInspector(state.cellIndex.latIdx, state.cellIndex.lonIdx);
     }
   }
 
@@ -4458,7 +3992,9 @@
   window.appState = state;
   window.kendall = {
     state,
-    tourEngine,
+    bootEngine,
+    replayBoot: () => bootEngine.start(true),
+    skipBoot: () => bootEngine.finish(true),
     setProjection,
     toggleTilt,
     dropPinMarker,
@@ -4466,7 +4002,6 @@
     updateInspector,
     snapCoordsToGrid,
     switchVariable,
-    launchTourStep,
     setSelectionMode,
     applyPreset,
     toggleDrawRegion,
@@ -4486,7 +4021,6 @@
     getMultipleTestingNoticeText,
     resetInactivityTimer,
   };
-  window.plotTwist = window.kendall; // Backwards-compatible alias for existing tests
 
   window.addEventListener('DOMContentLoaded', init);
 })();

@@ -1,201 +1,219 @@
-# Kendall: Planetary Multi-Decadal Trend & Era Shift Detector (2000–2025)
+# 🌍 Kendall: Planetary Climate Trend & Era Shift Detector (2000–2025)
 
 > **"Find the trends that are real."**  
 > *Named after the Mann-Kendall non-parametric trend test.*  
-> NASA Space Apps Challenge / Earth Science Variable Trend Detection & Open Science.
+> Built for the **NASA Space Apps Challenge** · Earth Science & Open Science.
 
-[![Audit Status](https://img.shields.io/badge/Scientific%20Audit-10%2F10%20PASS-34D399?style=flat-square)](docs/AUDIT.md)
-[![Python Tests](https://img.shields.io/badge/Pytest%20Suite-44%20PASS-22D3EE?style=flat-square)](tests/)
-[![Browser E2E](https://img.shields.io/badge/Playwright%20E2E-11%20PASS-A78BFA?style=flat-square)](tests/test_browser_smoke.py)
-[![Audio Tour](https://img.shields.io/badge/Narrated%20Tour-39%20Steps%20%7C%20Kokoro--82M-FF6B35?style=flat-square)](web/tour/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-F59E0B?style=flat-square)](models/kokoro/LICENSE)
-
----
-
-## Executive Overview
-
-Humanity faces accelerating climate volatility, yet identifying true long-term environmental shifts remains hindered by natural cyclical noise, seasonal distortion, sensor discontinuities between satellite generations, and temporal autocorrelation. 
-
-**Kendall** is an open-science, zero-backend planetary trend analytics platform that ingests **25.33 years (304 consecutive months: June 2000 – September 2025)** of continuous NASA satellite and reanalysis observations across **10,368 global grid cells**. 
-
-By applying robust non-parametric mathematics—monthly climatology anomaly extraction, pixel-wise Sen’s slope magnitude estimation, Hamed-Rao modified Mann-Kendall variance correction, and Benjamini-Hochberg False Discovery Rate (FDR) control—Kendall eliminates subjective guessing and separates authentic climate signals ($p < 0.05$) from sensor discontinuities and random weather noise.
+[![NASA Space Apps Challenge](https://img.shields.io/badge/NASA%20Space%20Apps-Challenge%20Submission-0B3D91?style=flat-square&logo=nasa)](https://www.spaceappschallenge.org)
+[![Zero Backend Architecture](https://img.shields.io/badge/Architecture-100%25%20In--Browser%20Zero--Backend-10B981?style=flat-square)](web/)
+[![Planetary Datasets](https://img.shields.io/badge/NASA%20Data-12%20Planetary%20Variables-22D3EE?style=flat-square)](src/variables.yaml)
+[![Temporal Extent](https://img.shields.io/badge/Coverage-25.33%20Years%20(304%20Months)-F59E0B?style=flat-square)](web/data/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-34D399?style=flat-square)](LICENSE)
 
 ---
 
-## Project Goals & Completion Matrix
+## ⚡ Quick Start: Run the App in 5 Seconds
 
-All core and extended goals for Project Kendall have been fully implemented, numerically audited, and verified:
+Kendall runs **100% in your browser** with **zero backend servers**, **no database**, and **no API keys**. The entire 25.33-year global dataset (~38.9 MB) loads directly onto your client machine.
 
-| # | Project Goal | Implementation Scope | Verification & Status |
-| :-: | :--- | :--- | :---: |
-| **1** | **Multi-Decadal NASA Data Ingestion** | 304 contiguous months (2000–2025) across 12 active planetary variables from GPM IMERG, GLDAS Noah, and MERRA-2. Conservative 2.5° area-weighted regridding with polar masking at $\|lat\| > 60^\circ$. | **COMPLETED**<br>*(100% manifest match, 0 polar leaks)* |
-| **2** | **Statistical Rigor & Autocorrelation Correction** | Pairwise Sen's slope rate estimation ($\text{units/decade}$), Hamed-Rao variance inflation for lag-1 autocorrelation ($\rho_1$), planetary FDR $q$-value control, and empirical Detectability Clocks. | **COMPLETED**<br>*(44 pytest unit tests pass)* |
-| **3** | **2014 Satellite Sensor Transition Diagnostic** | Domain-wide detrended step test across the 2014 TRMM-to-GPM sensor transition. Automatic cautionary regime-shift flags on verdict cards when era slopes flip without sub-period significance. | **COMPLETED**<br>*(Verified against Amazon & Sahel)* |
-| **4** | **Zero-Backend Spatial Database (<39 MB)** | Domain-aware int16 binary typed array buffers and gzip compression reducing multi-terabyte raw NASA NetCDF/HDF5 feeds to **38.93 MB** with sub-millimeter quantization error ($<0.6\%$). | **COMPLETED**<br>*(Passes strict 60 MB payload budget)* |
-| **5** | **Mission Control Interactive Web Application** | 3D orthographic WebGL globe and 2D Mercator flat map with smooth projection morphing, custom area-weighted bounding box region drawing, monthly scrubber, and Planetary Lineup. | **COMPLETED**<br>*(All 12 variables interactive in browser)* |
-| **6** | **Multiple Testing Safeguards ("Looks" Counter)** | Real-time counter tracking exploratory combinations tested. Calculates family-wise false positive risk ($1 - (1-0.05)^m$) with milestone toasts (5, 10, 20 looks) and auto-resets on case start or 3-min inactivity. | **COMPLETED**<br>*(Tested across desktop and mobile)* |
-| **7** | **Voice-Narrated Guided Tour System** | 90-second interactive Site Tour (14 steps) and 4 deep-dive Case File narrations (39 steps total). Local Kokoro-82M speech synthesis normalized to -16 LUFS (<3.6 MB bundle) with dynamic SVG mask tracking. | **COMPLETED**<br>*(Zero API keys, Apache 2.0 license)* |
-| **8** | **Exhaustive Multi-Layer Audit & Automated Test Suite** | 10-point data completeness audit ([`src/audit.py`](src/audit.py)), 44 Python scientific tests ([`tests/`](tests/)), Node.js client-vs-python parity engine ([`validate_js_stats.js`](tests/validate_js_stats.js)), and 11 Playwright browser E2E tests. | **COMPLETED**<br>*(10/10 Audit sections unconditionally pass)* |
-
----
-
-## The 12 Active Planetary Datasets
-
-Kendall operates on a unified global 2.5° × 2.5° grid (72 latitudes × 144 longitudes = 10,368 cells; 6,912 non-polar cells) across 304 contiguous months:
-
-| Variable ID | Descriptive Name | Source Instrument / Model | Canonical Units | Trend Rate Units |
-| :--- | :--- | :--- | :---: | :---: |
-| `gpm_precip` | Precipitation Rate | GPM IMERG Final Monthly V07B | $\text{mm/month}$ | $\text{mm/month/decade}$ |
-| `gldas_precip` | Reanalysis Precipitation Flux | GLDAS Noah Land Surface Model 2.1 | $\text{mm/month}$ | $\text{mm/month/decade}$ |
-| `gldas_soil_moist`| Soil Moisture (0–10 cm depth) | GLDAS Noah Land Surface Model 2.1 | $\text{kg/m}^2$ | $\text{kg/m}^2\text{/decade}$ |
-| `gldas_temp` | 2m Air Temperature | GLDAS Noah Land Surface Model 2.1 | $^\circ\text{C}$ | $^\circ\text{C/decade}$ |
-| `gldas_evap` | Total Evapotranspiration | GLDAS Noah Land Surface Model 2.1 | $\text{mm/month}$ | $\text{mm/month/decade}$ |
-| `merra2_aod` | Aerosol Optical Depth (550 nm) | MERRA-2 2D Atmospheric Reanalysis | $\text{dimensionless}$ | $1\text{/decade}$ |
-| `gldas_swe` | Snow Water Equivalent (SWE) | GLDAS Noah Land Surface Model 2.1 | $\text{kg/m}^2$ | $\text{kg/m}^2\text{/decade}$ |
-| `gldas_snow_depth`| Snow Depth | GLDAS Noah Land Surface Model 2.1 | $\text{m}$ | $\text{m/decade}$ |
-| `merra2_ts` | Surface / Ocean Skin Temperature | MERRA-2 2D Atmospheric Reanalysis | $^\circ\text{C}$ | $^\circ\text{C/decade}$ |
-| `merra2_wind` | 10m Surface Wind Speed | MERRA-2 2D Atmospheric Reanalysis | $\text{m/s}$ | $\text{m/s/decade}$ |
-| `merra2_ps` | Surface Atmospheric Pressure | MERRA-2 2D Atmospheric Reanalysis | $\text{hPa}$ | $\text{hPa/decade}$ |
-| `merra2_tqv` | Total Precipitable Water Vapor | MERRA-2 2D Atmospheric Reanalysis | $\text{kg/m}^2$ | $\text{kg/m}^2\text{/decade}$ |
-
-*(Note: `modis_ndvi` is explicitly documented as not included in this submission to preserve data purity).*
-
----
-
-## Repository Architecture
-
-```
-.
-├── README.md                          # Primary project documentation, goals & architecture
-├── Makefile                           # Unified developer shortcuts (test, audit, serve)
-├── requirements.txt                   # Scientific Python environment dependencies
-├── data/
-│   ├── download_manifest.json         # SHA-256 verified download ledger for 304 raw months
-│   ├── raw/                           # Raw downloaded HDF5 / NetCDF4 granules
-│   └── processed/                     # Gridded anomaly cubes & precomputed trend NetCDFs
-├── src/
-│   ├── audit.py                       # 10-point multi-layer scientific audit engine
-│   ├── variables.yaml                 # Master configuration for all 12 planetary variables
-│   ├── variables.py                   # Variable catalog schemas and unit conversion specs
-│   ├── process.py                     # Chronological granule reader, regridder & anomaly extractor
-│   ├── trend_all.py                   # Parallelized Sen's slope & Hamed-Rao Mann-Kendall calculator
-│   ├── export_web.py                  # Domain-aware int16 typed array compressor (<39 MB)
-│   ├── cross_check.py                 # Multi-dataset agreement & 2014 era-break diagnostics
-│   ├── download.py                    # Resilient NASA Earthdata bulk downloader
-│   └── auth.py                        # NASA Earthdata authentication & token manager
-├── web/
-│   ├── index.html                     # Kendall Mission Control single-page web application
-│   ├── style.css                      # Design tokens, CRT phosphor themes, mobile sheet & HUD
-│   ├── app.js                         # WebGL MapLibre globe/flat morph, Web Worker stats, HUD
-│   ├── icons/                         # SVG master icon, favicons, web manifest & social preview
-│   ├── tour/
-│   │   ├── tours.json                 # Data-driven tour steps with computed telemetry
-│   │   └── audio/
-│   │       ├── manifest.json          # Step ID to MP3 mapping, real durations & SHA256 hashes
-│   │       └── en/*.mp3               # 39 loudness-normalized speech clips (-16 LUFS, 3.53 MB)
-│   └── data/                          # Web assets for 12 variables (meta.json, trend, anomalies)
-├── scripts/
-│   ├── run_all_checks.sh              # Single-command unified audit runner (Python + Node + E2E)
-│   ├── build_tours.py                 # Telemetry-backed script generating web/tour/tours.json
-│   └── build_audio.py                 # Local Kokoro/Edge/Piper speech synthesis engine
-├── tests/
-│   ├── test_units.py                  # Unit conversions (mm/hr, kg/m2/s, Kelvin to Celsius)
-│   ├── test_regridding.py             # Conservative area-weighted averaging & global mean checks
-│   ├── test_anomalies.py              # Zero-climatology verification & uneven record handling
-│   ├── test_statistics.py             # Sen's slope recovery, Hamed-Rao variance, FDR control
-│   ├── test_regression.py             # Fixed benchmark checkpoints (Amazon, Sahel, pinned cells)
-│   ├── test_time_order.py             # Invariant strictly-increasing monthly time axis validation
-│   ├── test_tour_text.py              # Statistical definition presence & forbidden word scanner
-│   ├── validate_js_stats.js           # Client JS vs Python numerical parity across 360 cells
-│   ├── test_browser_smoke.py          # Playwright headless browser E2E smoke tests (7 tests)
-│   └── test_tour_browser.py           # Playwright headless browser tour E2E tests (4 tests)
-├── models/kokoro/                     # Local open-source Kokoro-82M ONNX model weights & Apache 2.0 license
-└── docs/
-    ├── AUDIT.md                       # Comprehensive 10-section independent audit report (PASS)
-    ├── SPACE_APPS_SUBMISSION.md       # Official NASA Space Apps Challenge submission dossier
-    └── screens/                       # High-resolution UI screenshots & tour step captures
-```
-
----
-
-## Verification & Testing Suite
-
-The repository contains a multi-layer test suite enforcing numerical precision, mathematical equivalence, and browser stability.
-
-### Unified Single-Command Runner
-
-Execute the entire four-stage audit across Python, Node.js, and Playwright in a single command:
+### 1. Clone & Enter the Repository
 
 ```bash
-bash scripts/run_all_checks.sh
-# or
-make audit
+git clone https://github.com/Ibrahim-Abdelsalam/Kendall.git
+cd Kendall
 ```
 
-### Verification Pipeline Stages
+### 2. Start the Local Server
 
-1. **Stage 1: Data Completeness & Integrity Audit (`src/audit.py`)**:
-   - Inspects raw files, processed NetCDFs, and web payloads.
-   - Confirms 304/304 contiguous months with 0 gaps, 0 duplicates, 0 polar mask leaks, and max quantization error $\le 0.04\text{ mm/mo}$.
-2. **Stage 2: Numerical, Scientific & Regression Tests (`pytest tests/`)**:
-   - 44 automated tests verifying unit conversions, global mean preservation within 0.5%, Theil-Sen slope recovery within 2%, Hamed-Rao variance inflation, and chronological time ordering.
-   - Validates that tour narrations match computed numbers and contain zero forbidden phrases (*"proves"*, *"confirms"*, *"real physical signal"*).
-3. **Stage 3: JavaScript vs. Python Statistical Parity (`node tests/validate_js_stats.js`)**:
-   - Evaluates 360 random cells across all 12 variables plus regional composites.
-   - Proves client-side browser math matches Python SciPy within $\le 2.0\%$ relative difference (typical error $<0.5\%$).
-4. **Stage 4: Playwright Headless Browser Smoke & Tour Tests (`tests/test_browser_smoke.py`, `tests/test_tour_browser.py`)**:
-   - 11 end-to-end browser tests verifying clean boot (0 console errors, 0 API-key requests), projection morphing, regional drawing, multiple-testing counters, and full guided tour playback.
+```bash
+# Option A: Using Python (Simplest & Recommended)
+python -m http.server 8000 --directory web
+
+# Or with Make:
+make serve
+```
+
+Then open your browser and navigate to:
+👉 **[http://localhost:8000](http://localhost:8000)**
+
+*(Alternative with Node.js: `npx serve web -p 8000`).*
 
 ---
 
-## Local Development & Quickstart
+## 🧭 What is Kendall?
 
-### 1. Environment Setup (Conda)
+When a farmer suffers three dry summers in a row, or a city faces repeated record rainfall, the critical question is: **"Is our regional climate permanently changing, or is this natural weather variability?"**
 
-Following the project environment policy, activate the preconfigured Anaconda environment:
+Raw climate maps often mislead because:
+1. **Seasons dominate**: Comparing July to January measures seasonal cycles, not climate change.
+2. **Weather memory**: Consecutive wet or dry months fool ordinary linear regressions into reporting false trends.
+3. **Sensor transitions**: In 2014, NASA transitioned from TRMM to GPM satellites—a sensor change that can easily masquerade as an abrupt climate shift.
+
+**Kendall** analyzes **25.33 continuous years (304 consecutive months: June 2000 – September 2025)** of NASA satellite observations and global reanalysis across **10,368 global grid cells**. By applying robust non-parametric mathematics, it separates true, statistically verified climate trends ($p < 0.05$) from short-term weather noise.
+
+---
+
+## 🌟 Mission Control Features
+
+- **🌐 Interactive 3D Globe & 2D Flat Map**: Smoothly morph between an orthographic 3D WebGL globe and an equirectangular flat map with MapLibre GL.
+- **📍 Point & Custom Region Analysis**: Click any coordinate on Earth or draw a custom bounding polygon to compute instant aggregate trends and area-weighted statistics.
+- **🎯 Clear Statistical Verdicts**:
+  - 🟢 **Significant Trend**: Strong multi-decadal signal verified after Hamed-Rao autocorrelation correction and False Discovery Rate (FDR) control.
+  - 🟡 **Trending, Not Yet Significant**: A visible slope exists, but 25 years of data is not yet sufficient to mathematically rule out chance.
+  - ⚪ **No Trend**: Historical fluctuations remain within expected natural variance.
+- **⏱️ Detectability Clock**: Calculates the exact minimum years of continuous observation required before the regional trend becomes statistically detectable above background noise.
+- **⚠️ 2014 Satellite Sensor Shift Guard**: Flags potential sensor transition artifacts in precipitation data around the 2014 TRMM-to-GPM constellation upgrade.
+- **👀 Multiple-Testing "Looks" Counter**: Tracks analytical exploratory queries and warns researchers when repeated testing elevates the risk of accidental false discoveries ($1 - (1 - 0.05)^m$).
+- **📊 Multi-Variable Cross-Check Lineup**: Compare multiple NASA planetary variables side-by-side to cross-validate physical consistency (e.g., rainfall decrease vs. soil moisture deficit vs. evapotranspiration).
+- **⏳ 304-Month Timeline Scrubber**: Animate monthly planetary anomalies from June 2000 through September 2025 with playback speed controls.
+
+---
+
+## 🛰️ The 12 NASA Planetary Datasets
+
+Kendall harmonizes 12 planetary climate variables onto a unified 2.5° × 2.5° global grid (72 latitudes × 144 longitudes) over 304 contiguous months (June 2000 – September 2025):
+
+| Variable ID | Dataset Name | Source Mission / Model | Canonical Units |
+| :--- | :--- | :--- | :---: |
+| `gpm_precip` | **Precipitation Rate** | NASA GPM IMERG Final Monthly V07B | $\text{mm/month}$ |
+| `gldas_precip` | **Precipitation Flux** | NASA GLDAS Noah Land Surface Model 2.1 | $\text{mm/month}$ |
+| `gldas_soil_moist`| **Soil Moisture (0–10 cm topsoil)** | NASA GLDAS Noah Land Surface Model 2.1 | $\text{kg/m}^2$ |
+| `gldas_temp` | **2m Air Temperature** | NASA GLDAS Noah Land Surface Model 2.1 | $^\circ\text{C}$ |
+| `gldas_evap` | **Total Evapotranspiration** | NASA GLDAS Noah Land Surface Model 2.1 | $\text{mm/month}$ |
+| `merra2_aod` | **Aerosol Optical Depth (550 nm)** | NASA MERRA-2 Atmospheric Reanalysis | $\text{dimensionless}$ |
+| `gldas_swe` | **Snow Water Equivalent (SWE)** | NASA GLDAS Noah Land Surface Model 2.1 | $\text{kg/m}^2$ |
+| `gldas_snow_depth`| **Snow Depth** | NASA GLDAS Noah Land Surface Model 2.1 | $\text{m}$ |
+| `merra2_ts` | **Skin / Surface Temperature** | NASA MERRA-2 Atmospheric Reanalysis | $^\circ\text{C}$ |
+| `merra2_wind` | **10m Surface Wind Speed** | NASA MERRA-2 Atmospheric Reanalysis | $\text{m/s}$ |
+| `merra2_ps` | **Surface Atmospheric Pressure** | NASA MERRA-2 Atmospheric Reanalysis | $\text{hPa}$ |
+| `merra2_tqv` | **Precipitable Water Vapor** | NASA MERRA-2 Atmospheric Reanalysis | $\text{kg/m}^2$ |
+
+---
+
+## 🔬 Scientific Methodology: 3-Filter Verification
+
+1. **Filter 1: Deseasonalization (Historical Same-Month Baseline)**  
+   Each month's value is compared strictly against the 25-year historical average for that calendar month (e.g., July 2024 vs. all Julys from 2000 to 2025). This strips away regular annual cycles.
+2. **Filter 2: Theil-Sen Robust Median Estimator**  
+   Ordinary least-squares regressions can be heavily distorted by a single anomalous drought or storm. The Theil-Sen estimator calculates the median slope across all pairwise observations, providing outlier-resistant trend quantification.
+3. **Filter 3: Hamed-Rao Autocorrelation Correction + FDR Control**  
+   Sequential climate observations exhibit temporal persistence (weather memory). Kendall calculates the effective sample size ($n^*$) using the Hamed-Rao variance inflation factor to avoid false positive significance alarms, paired with Benjamini-Hochberg False Discovery Rate (FDR) control across all 10,368 grid cells.
+
+---
+
+## 🛠️ Python Environment & Scientific Pipeline (Optional)
+
+To run the scientific audit or reproduce the data processing pipeline, set up the **Conda** environment:
 
 ```bash
-# Scientific environment (Python 3.11 with GDAL, xarray, pymannkendall)
-conda activate plot-twist
+# 1. Create and activate the conda environment
+conda create -n kendall python=3.11 -y
+conda activate kendall
 
-# Install any additional development dependencies
+# 2. Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Launch Local Web Server
+### Run Scientific Data Audit
+
+Verify the completeness, integrity, and quantization accuracy of all 12 datasets:
 
 ```bash
-cd web
-python -m http.server 8000
+make audit-data
+# or:
+python src/audit.py
 ```
-Open **`http://localhost:8000`** in any modern web browser.
 
-### 3. Regenerating Tours and Audio
+### Reproduce Data Ingest (Optional)
 
-The guided tours and audio narration are 100% locally generated without external APIs:
+If downloading new granules or recomputing grids from NASA Earthdata:
 
 ```bash
-# Generate tours.json from real computed NetCDF statistics
-/opt/anaconda3/envs/plot-twist/bin/python scripts/build_tours.py
+export EARTHDATA_USERNAME="your_username"
+export EARTHDATA_PASSWORD="your_password"
 
-# Generate natural speech audio using local Kokoro-82M ONNX model
-PATH="/opt/anaconda3/envs/plot-twist/bin:$PATH" /opt/anaconda3/envs/plot-twist/bin/python scripts/build_audio.py --backend kokoro --voice af_heart --lang en
+# Example: Process a variable through the pipeline
+python src/download.py --var gpm_precip
+python src/process.py --var gpm_precip
+python src/trend_all.py --var gpm_precip
+python src/export_web.py --var gpm_precip
 ```
 
 ---
 
-## Voice Narration & Audio Pipeline Credits
+## 📁 Repository Structure
 
-Kendall features a fully local, narrated guided tour powered by high-fidelity open-source speech synthesis without external API keys or remote server calls.
+The layout below mirrors the exact directory structure of the repository:
 
-### Voice Model & License
-- **Model**: **Kokoro-82M** (v0.19 ONNX runtime, voices v1.0, default voice: `af_heart`) developed by Hexgrad.
-- **License**: **Apache License, Version 2.0 (January 2004)** (verified directly from the model's license file at [`models/kokoro/LICENSE`](models/kokoro/LICENSE)).
-  - *Terms*: Licensed under the Apache License, Version 2.0; you may not use this file except in compliance with the License. You may obtain a copy of the License at `http://www.apache.org/licenses/LICENSE-2.0`.
-- **Audio Processing**:
-  - Sentence-by-sentence synthesis joined by 300 ms silence intervals.
-  - Loudness normalization via FFmpeg `loudnorm` filter targeted to **-16 LUFS** (`I=-16:TP=-1.5:LRA=11`).
-  - Monophonic 64 kbps MP3 encoding for fast web streaming with total bundle size under **3.6 MB** (well below the 15 MB constraint).
-- **Secondary Backends**:
-  - `edge-tts` for Arabic (`ar-EG-SalmaNeural`, `ar-EG-ShakirNeural`) and English (`en-US-AriaNeural`).
-  - `piper-tts` local fallback.
+```
+.
+├── .gitignore                         # Git exclusion rules (ignores raw data, tracks web/data)
+├── LICENSE                            # Open-source Apache License 2.0
+├── Makefile                           # Command shortcuts (make serve, make audit-data)
+├── README.md                          # Project documentation and setup guide
+├── requirements.txt                   # Pipeline dependencies (xarray, netCDF4, pymannkendall)
+├── docs/
+│   └── submission/                    # NASA Space Apps Challenge submission kit
+│       ├── 01_project_name.txt        # Official project name ("Kendall")
+│       ├── 02_summary.txt             # Project summary (< 200 words)
+│       ├── 04_project_link.txt        # Live application URL
+│       ├── 05_project_details.md      # Detailed submission response & design rationale
+│       ├── 06_ai_use.txt              # Responsible AI usage disclosure
+│       ├── 07_nasa_data.txt           # NASA Earth Science missions cited
+│       └── 08_partner_and_other_data.txt # Partner & reference data citations
+├── src/                               # Scientific data processing & audit pipeline
+│   ├── audit.py                       # 10-point completeness & integrity audit
+│   ├── auth.py                        # NASA Earthdata authentication handler
+│   ├── cross_check.py                 # Multi-variable physical consistency validator
+│   ├── download.py                    # Bulk granule downloader for GES DISC & GMAO
+│   ├── export_web.py                  # Domain-aware int16 typed array compressor
+│   ├── fetch.py                       # Generic granule fetcher with retry logic
+│   ├── fetch_aerosols.py              # MERRA-2 aerosol optical depth fetcher
+│   ├── fetch_merra2_slv.py            # MERRA-2 single-level atmospheric variables fetcher
+│   ├── loader.py                      # Local NetCDF/HDF5 granule reader
+│   ├── plot_trends.py                 # Trend visualization & debug plotter
+│   ├── preprocess.py                  # Spatial regridding and anomaly calculation
+│   ├── process.py                     # Generic preprocessing and regridding engine
+│   ├── trend.py                       # Mann-Kendall and Sen's slope algorithm
+│   ├── trend_all.py                   # Parallelized batch trend estimator
+│   ├── validate.py                    # Data sanity, bounds, and sign validator
+│   ├── variables.py                   # Variable catalog schemas and dataclasses
+│   └── variables.yaml                 # Formal registry of all 12 NASA variables
+└── web/                               # Standalone client application (100% in-browser)
+    ├── app.js                         # WebGL MapLibre globe, stats engine & UI controls
+    ├── countries-110m.json            # Base world geography TopoJSON
+    ├── favicon.ico                    # Browser favicon
+    ├── icons/                         # Application icons & PWA assets
+    │   ├── apple-touch-icon.png
+    │   ├── favicon-16x16.png
+    │   ├── favicon-32x32.png
+    │   ├── favicon.svg
+    │   ├── icon-192.png
+    │   ├── icon-512.png
+    │   ├── kendall.svg
+    │   └── og-image.png
+    ├── index.html                     # Mission Control UI layout
+    ├── manifest.webmanifest           # Progressive Web App manifest
+    ├── style.css                      # Design tokens, CRT theme & responsive HUD
+    ├── topojson-client.min.js         # TopoJSON parser library
+    └── data/                          # Compressed binary anomaly data (12 datasets, ~38.9 MB)
+        ├── gldas_evap/                # Total Evapotranspiration
+        ├── gldas_precip/              # Precipitation Flux (GLDAS)
+        ├── gldas_snow_depth/          # Snow Depth
+        ├── gldas_soil_moist/          # Topsoil Moisture (0-10 cm)
+        ├── gldas_swe/                 # Snow Water Equivalent
+        ├── gldas_temp/                # 2m Air Temperature
+        ├── gpm_precip/                # Precipitation Rate (GPM IMERG V07B)
+        ├── merra2_aod/                # Aerosol Optical Depth (550 nm)
+        ├── merra2_ps/                 # Surface Atmospheric Pressure
+        ├── merra2_tqv/                # Total Precipitable Water Vapor
+        ├── merra2_ts/                 # Surface Skin Temperature
+        └── merra2_wind/               # 10m Surface Wind Speed
+```
+
+---
+
+## 📜 License & Credits
+
+- **Application Code**: Open-source under the [Apache License 2.0](LICENSE).
+- **NASA Data Sources**: Publicly provided by NASA Earth Science Data Systems (GES DISC, GMAO, GPM Science Team, GLDAS Science Team).

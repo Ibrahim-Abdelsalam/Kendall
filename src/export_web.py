@@ -1,4 +1,4 @@
-"""Web Export Utility for Plot Twist Static Website.
+"""Web Export Utility for Kendall Static Website.
 
 Exports compact, web-optimized JSON and gzipped binary/int16 files to web/data/{var_id}/:
   1. meta.json: Variable metadata, student definitions, era break caution notes, and summary statistics.
@@ -415,7 +415,7 @@ def export_variable_to_web(var_id: str) -> Dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Export web payloads for Plot Twist.")
+    parser = argparse.ArgumentParser(description="Export web payloads for Kendall.")
     parser.add_argument("var_id", default="gpm_precip", nargs="?", help="Variable ID (default: gpm_precip)")
     args = parser.parse_args()
 

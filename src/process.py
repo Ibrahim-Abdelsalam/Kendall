@@ -1,4 +1,4 @@
-"""Generic Preprocessing & 2.5° Regridding Engine for Plot Twist.
+"""Generic Preprocessing & 2.5° Regridding Engine for Kendall.
 
 Processes raw granules for any variable in variables.py:
   1. Standardizes coordinates (monotonic lat [-90, 90], lon [-180, 180]).
@@ -367,7 +367,7 @@ def process_variable(var_id: str) -> Path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generic preprocessor for Plot Twist.")
+    parser = argparse.ArgumentParser(description="Generic preprocessor for Kendall.")
     parser.add_argument("var_id", default="gpm_precip", nargs="?", help="Variable ID (default: gpm_precip)")
     args = parser.parse_args()
 
